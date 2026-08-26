@@ -1,0 +1,6 @@
+name: hermes-scanner-datadiri
+version: 0.1.0
+description: Local document OCR using PaddleOCR-VL
+provides_tools:
+  - scan_document_ocr
+  - export_document
