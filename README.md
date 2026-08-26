@@ -5,7 +5,7 @@ Plugin Hermes untuk OCR dokumen lokal menggunakan PaddleOCR-VL dan ekspor lapora
 ## Instalasi Hermes
 
 ```bash
-hermes plugins install ramfdp/hermes-scanner-datadiri --enable
+hermes plugins install ramfdp/plugin-hermes-scanner-datadiri --enable
 ```
 
 ## Catatan runtime
