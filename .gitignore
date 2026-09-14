@@ -5,3 +5,5 @@ output/
 .env
 *.key
 *.log
+/graphify-out
+/models/

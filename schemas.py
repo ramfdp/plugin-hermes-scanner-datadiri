@@ -2,11 +2,11 @@ SCAN_DOCUMENT_OCR = {
     "name": "scan_document_ocr",
 
     "description": (
-        "Scan and read a local image or PDF using local PaddleOCR-VL. "
-        "Use this tool when the user provides a document file path "
-        "and asks to OCR, scan, read, inspect, or extract its contents. "
+        "Read a local CV, KAK, or supporting attachment offline using MinerU 2.5 Pro. "
+        "This plugin is for CV review, not KTP scanning. "
+        "Call it once for the CV and again for the KAK and each attachment. "
         "The tool directly returns the OCR result in the 'ocr_text' field. "
-        "Use ocr_text to answer the user. "
+        "Use ocr_text to map biodata and experience claims. "
         "Do not open json_files or markdown_files unless ocr_text is missing "
         "or debugging is explicitly needed."
     ),
@@ -54,5 +54,35 @@ EXPORT_DOCUMENT = {
             },
         },
         "required": ["template", "payload", "output_path"],
+    },
+}
+
+
+EXPORT_CV_REPORT = {
+    "name": "export_cv_report",
+    "description": (
+        "Buat laporan review CV dalam DOCX dari payload hasil pemetaan Hermes. "
+        "Alur wajib: pemetaan biodata -> validasi pengalaman dengan sumber internet "
+        "-> cross-check CV dan lampiran -> temuan/janggal -> kesimpulan. "
+        "Validasi internet dilakukan Hermes menggunakan sumber yang dapat dikutip; "
+        "tool ini hanya merender hasil dan tidak mengarang verifikasi."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "payload": {
+                "type": "object",
+                "description": (
+                    "Wajib berisi cv_file, biodata, experience_validation, "
+                    "attachment_cross_check, dan findings. Sertakan internet_sources, "
+                    "conclusion, serta status bila tersedia."
+                ),
+            },
+            "output_path": {
+                "type": "string",
+                "description": "Path absolut file laporan DOCX yang akan dibuat.",
+            },
+        },
+        "required": ["payload", "output_path"],
     },
 }

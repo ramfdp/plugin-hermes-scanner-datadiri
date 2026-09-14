@@ -16,3 +16,10 @@ def register(ctx):
         schema=schemas.EXPORT_DOCUMENT,
         handler=tools.export_document,
     )
+
+    ctx.register_tool(
+        name="export_cv_report",
+        toolset="hermes_scanner",
+        schema=schemas.EXPORT_CV_REPORT,
+        handler=tools.export_cv_report,
+    )

@@ -80,11 +80,15 @@ def scan_document_ocr(args: dict, **kwargs) -> str:
             + child_env.get("PATH", "")
         )
 
+        timeout = int(os.environ.get("HERMES_OCR_TIMEOUT_SECONDS", "7200"))
+        if timeout <= 0:
+            raise ValueError("HERMES_OCR_TIMEOUT_SECONDS harus lebih dari nol")
         process = subprocess.run(
             [
                 str(python_exe),
                 str(runner),
-                str(input_path)
+                str(input_path),
+                "--text-only",
             ],
             cwd=str(project_dir),
             env=child_env,
@@ -92,7 +96,7 @@ def scan_document_ocr(args: dict, **kwargs) -> str:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=1200,
+            timeout=timeout,
             shell=False
         )
 
@@ -122,8 +126,8 @@ def scan_document_ocr(args: dict, **kwargs) -> str:
 
         if parsed.get("success"):
             parsed["instruction"] = (
-                "OCR sudah selesai. Petakan 'ocr_text' atau 'ocr_json' "
-                "ke payload template, lalu panggil export_document."
+                "OCR sudah selesai. Gunakan 'ocr_text' untuk review CV/KAK/lampiran. "
+                "JSON layout lengkap tersedia di 'json_files' bila diperlukan."
             )
 
         return _result(parsed)
@@ -232,3 +236,57 @@ def export_document(args: dict, **kwargs) -> str:
             "error": type(exc).__name__,
             "message": str(exc)
         })
+
+
+def export_cv_report(args: dict, **kwargs) -> str:
+    try:
+        payload = args.get("payload")
+        output_path = str(args.get("output_path", "")).strip().strip('"').strip("'")
+        if not isinstance(payload, dict) or not output_path:
+            return _result({"success": False, "error": "INVALID_CV_REPORT_ARGUMENTS"})
+
+        project_path = os.environ.get("HERMES_SCANNER_PROJECT", "").strip()
+        if not project_path:
+            return _result({"success": False, "error": "HERMES_SCANNER_PROJECT_NOT_SET"})
+
+        project_dir = Path(project_path).expanduser().resolve()
+        python_exe = project_dir / ".venv" / "Scripts" / "python.exe"
+        renderer = project_dir / "cv_report.py"
+        output = Path(output_path).expanduser().resolve()
+        if output.suffix.lower() != ".docx":
+            return _result({"success": False, "error": "OUTPUT_MUST_BE_DOCX"})
+        if not python_exe.exists() or not renderer.exists():
+            return _result({"success": False, "error": "CV_REPORT_RUNTIME_NOT_FOUND"})
+
+        child_env = os.environ.copy()
+        child_env.pop("PYTHONPATH", None)
+        child_env.pop("PYTHONHOME", None)
+        child_env.pop("VIRTUAL_ENV", None)
+        child_env["PATH"] = str(project_dir / ".venv" / "Scripts") + os.pathsep + child_env.get("PATH", "")
+        process = subprocess.run(
+            [str(python_exe), str(renderer), "--payload-json", "-", "--output", str(output)],
+            cwd=str(project_dir),
+            env=child_env,
+            input=json.dumps(payload, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            shell=False,
+        )
+        marker = "HERMES_CV_REPORT_RESULT="
+        for line in reversed(process.stdout.splitlines()):
+            if line.startswith(marker):
+                return line[len(marker):]
+        return _result({
+            "success": False,
+            "error": "CV_REPORT_RESULT_NOT_FOUND",
+            "return_code": process.returncode,
+            "stdout": process.stdout[-3000:],
+            "stderr": process.stderr[-3000:],
+        })
+    except subprocess.TimeoutExpired:
+        return _result({"success": False, "error": "CV_REPORT_TIMEOUT"})
+    except Exception as exc:
+        return _result({"success": False, "error": type(exc).__name__, "message": str(exc)})

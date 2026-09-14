@@ -1,6 +1,7 @@
 name: hermes-scanner-datadiri
-version: 0.1.0
-description: Local document OCR using PaddleOCR-VL
+version: 0.3.0
+description: Offline MinerU 2.5 Pro CV, KAK, and attachment OCR plus CV review report
 provides_tools:
   - scan_document_ocr
   - export_document
+  - export_cv_report

@@ -1,4 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
 openpyxl
 python-docx
-paddleocr
-paddlepaddle
+torch==2.10.0+cu128
+torchvision==0.25.0+cu128
+mineru-vl-utils[transformers]==2.0.4
+transformers==5.10.1
+pypdfium2==5.13.0
