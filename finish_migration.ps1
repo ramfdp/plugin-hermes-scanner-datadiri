@@ -12,6 +12,9 @@ foreach ($name in @('__init__.py', 'tools.py', 'schemas.py', 'plugin.yaml')) {
     if (Test-Path -LiteralPath $installed) { Copy-Item -LiteralPath $installed -Destination $backup }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $installed -Force
 }
+$desktopTarget = Join-Path $pluginTarget 'desktop'
+New-Item -ItemType Directory -Path $desktopTarget -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'desktop/plugin.js') -Destination (Join-Path $desktopTarget 'plugin.js') -Force
 
 # Only remove the two identified legacy OCR model directories, never the cache root.
 $cacheRoot = [IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.paddlex/official_models'))

@@ -1,0 +1,67 @@
+{
+  "judul": "DAFTAR TENAGA AHLI",
+  "wilayah": "JAWA 1",
+  "pekerjaan": "Data hasil ekstraksi Scan CV TA Jawa 1 ttd lengkap_removed (1)",
+  "personel": [
+    {
+      "nama_personel": "Anderson Hario Pangestiaji",
+      "nik": "[ID_04C81B5A]",
+      "jabatan_personel": "Team Leader 1",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Atma Jaya Yogyakarta 2011",
+      "sertifikat_keahlian": "Ahli Madya Teknik Bangunan Gedung (Jenjang 8)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 72,
+      "pengalaman_kerja_tahun": 6.0
+    },
+    {
+      "nama_personel": "Dasa Aprisandi",
+      "nik": "[ID_7DB59850]",
+      "jabatan_personel": "Team Leader 2",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Muhammadiyah Jakarta 2012",
+      "sertifikat_keahlian": "Ahli Madya Manajemen Proyek (Jenjang 8)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 120,
+      "pengalaman_kerja_tahun": 10.0
+    },
+    {
+      "nama_personel": "Nyoman Sutawan",
+      "nik": "[ID_REDACTED]",
+      "jabatan_personel": "Tenaga Ahli K3 Konstruksi 1",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Tamansiswa Palembang 2015",
+      "sertifikat_keahlian": "Ahli Muda K3 Konstruksi (Jenjang 7)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 38,
+      "pengalaman_kerja_tahun": 3.16
+    },
+    {
+      "nama_personel": "Youngky Vicktor Dinata",
+      "nik": "[ID_REDACTED]",
+      "jabatan_personel": "Tenaga Ahli K3 Konstruksi 2",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Bina Darma 2012",
+      "sertifikat_keahlian": "Ahli Madya K3 Konstruksi (Jenjang 8)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 65,
+      "pengalaman_kerja_tahun": 5.41
+    },
+    {
+      "nama_personel": "Orga Sepdita Ari",
+      "nik": "[ID_B92054DA]",
+      "jabatan_personel": "Tenaga Ahli Struktur 1",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Muhammadiyah Jember 2011",
+      "sertifikat_keahlian": "Ahli Muda Teknik Bangunan Gedung (Jenjang 7)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 37,
+      "pengalaman_kerja_tahun": 3.08
+    },
+    {
+      "nama_personel": "M Syahroni",
+      "nik": "[ID_8A9A812B]",
+      "jabatan_personel": "Tenaga Ahli Struktur 2",
+      "kualifikasi_pendidikan": "S1 Teknik Sipil Universitas Batanghari 2018",
+      "sertifikat_keahlian": "Ahli Muda Teknik Bangunan Gedung (Jenjang 7)",
+      "pengalaman_min_kak_tahun": "",
+      "pengalaman_kerja_bulan": 60,
+      "pengalaman_kerja_tahun": 5.0
+    }
+  ]
+}
