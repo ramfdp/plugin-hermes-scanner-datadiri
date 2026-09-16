@@ -4,7 +4,7 @@ import math
 import sys
 from pathlib import Path
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import (
     Alignment,
     Border,
@@ -124,6 +124,11 @@ def validate_payload(
         raise ValueError(
             "'personel' harus berupa array/list."
         )
+
+    for key in ("personel", "employment_history"):
+        records = payload.get(key, [])
+        if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
+            raise ValueError(f"'{key}' harus berupa array object.")
 
 
 # ============================================================
@@ -552,9 +557,27 @@ def render_daftar_tenaga_ahli(
         exist_ok=True,
     )
 
-    workbook.save(
-        output_path
-    )
+    if "employment_history" in payload:
+        history = workbook.create_sheet("Riwayat Pekerjaan")
+        fields = ("nama_personel", "employer", "role", "start_date", "end_date",
+                  "duration_months", "responsibilities", "project", "source_page", "source_quote")
+        history.append(fields)
+        for job in payload["employment_history"]:
+            history.append([job.get(field, "") for field in fields])
+        history.freeze_panes = "A2"
+        history.auto_filter.ref = history.dimensions
+        for column in history.columns:
+            history.column_dimensions[column[0].column_letter].width = 24
+            for cell in column:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    # OCR and mapped strings are data, including strings beginning with '='.
+    for worksheet in workbook:
+        for row in worksheet:
+            for cell in row:
+                if isinstance(cell.value, str):
+                    cell.data_type = "s"
+    workbook.save(output_path)
 
 
 # ============================================================
@@ -588,6 +611,8 @@ def export_payload(
     payload: dict,
     output_path: Path,
 ):
+    if template_id != "daftar_tenaga_ahli":
+        raise ValueError(f"Template tidak didukung: {template_id}")
     template_dir = (
         TEMPLATES_DIR
         / template_id
@@ -630,8 +655,23 @@ def export_payload(
             f"'{template_id}' belum tersedia."
         )
 
+    payload_file = output_path.with_suffix(".payload.json")
+    payload_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    workbook = load_workbook(output_path, read_only=True, data_only=True)
+    try:
+        workbook_data = {
+            sheet.title: list(sheet.iter_rows(min_row=5 if sheet.title == "Daftar Tenaga Ahli" else 1,
+                                            values_only=True))
+            for sheet in workbook
+        }
+    finally:
+        workbook.close()
+
     return {
         "success": True,
+
+        "payload_file": str(payload_file.resolve()),
+        "workbook_data": workbook_data,
 
         "template": template_id,
 

@@ -36,6 +36,24 @@ def render_report(payload: dict, output_path: Path) -> dict:
     missing = [key for key in required if key not in payload]
     if missing:
         raise ValueError("Field wajib belum tersedia: " + ", ".join(missing))
+    for key in ("experience_validation", "attachment_cross_check", "employer_validation"):
+        rows = payload.get(key, [])
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError(f"'{key}' harus berupa array object.")
+    for key in ("findings", "internet_sources", "chronology_validation"):
+        values = payload.get(key, [])
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            raise ValueError(f"'{key}' harus berupa array string.")
+    if not isinstance(payload.get("source_artifacts", {}), dict):
+        raise ValueError("source_artifacts harus berupa object.")
+    for employer in payload.get("employer_validation", []):
+        sources = employer.get("sources", [])
+        if not isinstance(sources, list) or any(not isinstance(url, str) for url in sources):
+            raise ValueError("sources perusahaan harus berupa array URL.")
+        if employer.get("status") in ("terverifikasi", "sebagian terverifikasi") and not any(
+            url.startswith(("https://", "http://")) for url in sources
+        ):
+            raise ValueError("Status perusahaan terverifikasi memerlukan URL sumber.")
 
     parts = [paragraph("LAPORAN REVIEW CV", "Title"), paragraph("Dokumen hasil pemetaan biodata, validasi pengalaman, dan cross-check lampiran."), paragraph(f"File CV: {payload['cv_file']}")]
     if payload.get("kak_file"):
@@ -65,6 +83,21 @@ def render_report(payload: dict, output_path: Path) -> dict:
     parts.append(paragraph(payload.get("conclusion", "Belum ada kesimpulan.")))
     parts.append(paragraph("Status akhir: " + text(payload.get("status", "perlu review manual"))))
 
+    if "employer_validation" in payload:
+        parts.append(paragraph("7. Verifikasi Perusahaan", "Heading1"))
+        rows = [["Perusahaan", "Status", "Bukti dan Batasan", "Sumber", "Tanggal Pemeriksaan"]]
+        rows.extend([[item.get("employer", ""), item.get("status", "belum dapat diverifikasi"),
+                      item.get("evidence", ""), "\n".join(item.get("sources", [])),
+                      item.get("checked_at", "")] for item in payload["employer_validation"]])
+        parts.append(table(rows))
+        parts.append(paragraph("Keberadaan perusahaan bukan bukti bahwa kandidat pernah bekerja di sana."))
+    if "chronology_validation" in payload:
+        parts.append(paragraph("8. Validasi Kronologi", "Heading1"))
+        parts.extend(paragraph(item) for item in payload["chronology_validation"])
+    if payload.get("source_artifacts"):
+        parts.append(paragraph("9. Dokumen Sumber", "Heading1"))
+        parts.append(key_value_table(payload["source_artifacts"]))
+
     document_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + "".join(parts) + '<w:sectPr/></w:body></w:document>'
     styles_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/></w:style></w:styles>'
     content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>'
@@ -78,7 +111,10 @@ def render_report(payload: dict, output_path: Path) -> dict:
         archive.writestr("word/document.xml", document_xml)
         archive.writestr("word/styles.xml", styles_xml)
         archive.writestr("word/_rels/document.xml.rels", document_rels)
-    return {"success": True, "template": "cv_review", "output_file": str(output_path.resolve()), "finding_count": len(payload["findings"] or [])}
+    json_path = output_path.with_suffix(".json")
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"success": True, "template": "cv_review", "output_file": str(output_path.resolve()),
+            "json_file": str(json_path.resolve()), "finding_count": len(payload["findings"] or [])}
 
 
 def render_personnel_docx(payload: dict, output_path: Path) -> None:

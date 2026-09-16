@@ -16,6 +16,21 @@ def _child_env(project_dir):
     return env
 
 
+def _export_result(process, marker, output):
+    for line in reversed(process.stdout.splitlines()):
+        if line.startswith(marker):
+            result = json.loads(line[len(marker):])
+            if process.returncode != 0:
+                result.update(success=False, error="EXPORT_PROCESS_FAILED",
+                              return_code=process.returncode, stderr=process.stderr[-3000:])
+            elif result.get("success") and not output.is_file():
+                result.update(success=False, error="EXPORT_FILE_NOT_FOUND", output_file=str(output))
+            return _result(result)
+    return _result({"success": False, "error": "EXPORT_RESULT_NOT_FOUND",
+                    "return_code": process.returncode, "stdout": process.stdout[-3000:],
+                    "stderr": process.stderr[-3000:]})
+
+
 def scan_document_ocr(args: dict, **kwargs) -> str:
     try:
         file_path = str(args.get("file_path", "")).strip()
@@ -122,6 +137,7 @@ def scan_document_ocr(args: dict, **kwargs) -> str:
         parsed["return_code"] = process.returncode
 
         if process.returncode != 0:
+            parsed["success"] = False
             parsed["stderr"] = process.stderr[-3000:]
 
         if parsed.get("success"):
@@ -203,18 +219,7 @@ def export_document(args: dict, **kwargs) -> str:
             shell=False,
         )
 
-        marker = "HERMES_EXPORT_RESULT="
-        for line in reversed(process.stdout.splitlines()):
-            if line.startswith(marker):
-                return line[len(marker):]
-
-        return _result({
-            "success": False,
-            "error": "EXPORT_RESULT_NOT_FOUND",
-            "return_code": process.returncode,
-            "stdout": process.stdout[-3000:],
-            "stderr": process.stderr[-3000:],
-        })
+        return _export_result(process, "HERMES_EXPORT_RESULT=", output)
 
     except subprocess.TimeoutExpired:
         return _result({
@@ -264,17 +269,7 @@ def export_cv_report(args: dict, **kwargs) -> str:
             timeout=120,
             shell=False,
         )
-        marker = "HERMES_CV_REPORT_RESULT="
-        for line in reversed(process.stdout.splitlines()):
-            if line.startswith(marker):
-                return line[len(marker):]
-        return _result({
-            "success": False,
-            "error": "CV_REPORT_RESULT_NOT_FOUND",
-            "return_code": process.returncode,
-            "stdout": process.stdout[-3000:],
-            "stderr": process.stderr[-3000:],
-        })
+        return _export_result(process, "HERMES_CV_REPORT_RESULT=", output)
     except subprocess.TimeoutExpired:
         return _result({"success": False, "error": "CV_REPORT_TIMEOUT"})
     except Exception as exc:

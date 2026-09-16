@@ -7,8 +7,8 @@ SCAN_DOCUMENT_OCR = {
         "Call it once for the CV and again for the KAK and each attachment. "
         "The tool directly returns the OCR result in the 'ocr_text' field. "
         "Use ocr_text to map biodata and experience claims. "
-        "Do not open json_files or markdown_files unless ocr_text is missing "
-        "or debugging is explicitly needed."
+        "Read the relevant json_files when OCR claims need checking against page evidence. "
+        "Use output_dir for this run's Excel and validation report artifacts."
     ),
 
     "parameters": {
@@ -35,7 +35,8 @@ EXPORT_DOCUMENT = {
     "description": (
         "Export JSON yang sudah dipetakan dari hasil OCR ke dokumen. "
         "Untuk template daftar_tenaga_ahli, payload berisi judul, wilayah, "
-        "pekerjaan, dan array personel."
+        "pekerjaan, dan array personel. Sertakan employment_history dan ocr_json_files untuk review CV. "
+        "Mengembalikan payload_file JSON dan workbook_data hasil baca ulang Excel untuk dasar validasi."
     ),
     "parameters": {
         "type": "object",
@@ -46,7 +47,12 @@ EXPORT_DOCUMENT = {
             },
             "payload": {
                 "type": "object",
-                "description": "JSON hasil pencocokan data OCR oleh Hermes.",
+                "description": (
+                    "JSON pemetaan OCR: judul, wilayah, pekerjaan, personel. "
+                    "employment_history opsional: array object dengan nama_personel, employer, role, "
+                    "start_date, end_date, duration_months, responsibilities, project, source_page, source_quote. "
+                    "ocr_json_files: array path JSON OCR sumber."
+                ),
             },
             "output_path": {
                 "type": "string",
@@ -65,7 +71,9 @@ EXPORT_CV_REPORT = {
         "Alur wajib: pemetaan biodata -> validasi pengalaman dengan sumber internet "
         "-> cross-check CV dan lampiran -> temuan/janggal -> kesimpulan. "
         "Validasi internet dilakukan Hermes menggunakan sumber yang dapat dikutip; "
-        "tool ini hanya merender hasil dan tidak mengarang verifikasi."
+        "tool ini menyimpan DOCX dan JSON laporan, tidak melakukan pencarian sendiri. "
+        "Gunakan web_search dan web_extract untuk setiap perusahaan sebelum memanggil tool ini; "
+        "jika web gagal, nyatakan belum dapat diverifikasi."
     ),
     "parameters": {
         "type": "object",
@@ -75,7 +83,10 @@ EXPORT_CV_REPORT = {
                 "description": (
                     "Wajib berisi cv_file, biodata, experience_validation, "
                     "attachment_cross_check, dan findings. Sertakan internet_sources, "
-                    "conclusion, serta status bila tersedia."
+                    "conclusion, serta status bila tersedia. Tambahkan employer_validation: array object "
+                    "(employer, status, evidence, sources=array URL, checked_at); chronology_validation: array string; "
+                    "source_artifacts: object (excel_file, payload_file, ocr_json_files). "
+                    "Status perusahaan terverifikasi memerlukan URL sumber."
                 ),
             },
             "output_path": {
