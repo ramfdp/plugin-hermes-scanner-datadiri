@@ -1,8 +1,0 @@
-{
-  "required_fields": [
-    "judul",
-    "wilayah",
-    "pekerjaan",
-    "personel"
-  ]
-}

@@ -14,7 +14,7 @@ function ScannerDataDialog() {
   openScannerDataDialog = () => setOpen(true)
 
   async function startScan(nextFile) {
-    const path = nextFile?.path
+    const path = nextFile ? window.hermesDesktop?.getPathForFile?.(nextFile) || '' : ''
     const sessionId = host.state.activeSessionId.get()
 
     if (!path) {
@@ -40,6 +40,7 @@ function ScannerDataDialog() {
       await host.request('prompt.submit', {
         session_id: sessionId,
         text: [
+          `📎 CV terlampir: ${attached.name}`,
           attached.ref_text,
           'Jalankan alur Scanner Data Diri sampai selesai. Panggil scan_document_ocr tepat untuk CV ini dan tunggu OCR selesai. Jika OCR gagal atau success=false, hentikan alur dan tampilkan error; jangan membuat Excel seolah-olah berhasil.',
           'Setelah OCR berhasil, petakan biodata, pendidikan, seluruh riwayat pekerjaan, nama perusahaan, tanggal mulai, tanggal selesai, durasi bulan/tahun, jabatan, tanggung jawab, proyek, dan bukti yang tersedia. Bedakan fakta yang tertulis dari inferensi.',

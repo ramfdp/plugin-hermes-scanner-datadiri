@@ -8,6 +8,14 @@ def _result(data):
     return json.dumps(data, ensure_ascii=False)
 
 
+def _child_env(project_dir):
+    env = os.environ.copy()
+    for name in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+        env.pop(name, None)
+    env["PATH"] = str(project_dir / ".venv" / "Scripts") + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def scan_document_ocr(args: dict, **kwargs) -> str:
     try:
         file_path = str(args.get("file_path", "")).strip()
@@ -70,15 +78,7 @@ def scan_document_ocr(args: dict, **kwargs) -> str:
                 "path": str(runner)
             })
 
-        child_env = os.environ.copy()
-        child_env.pop("PYTHONPATH", None)
-        child_env.pop("PYTHONHOME", None)
-        child_env.pop("VIRTUAL_ENV", None)
-        child_env["PATH"] = (
-            str(project_dir / ".venv" / "Scripts")
-            + os.pathsep
-            + child_env.get("PATH", "")
-        )
+        child_env = _child_env(project_dir)
 
         timeout = int(os.environ.get("HERMES_OCR_TIMEOUT_SECONDS", "7200"))
         if timeout <= 0:
@@ -182,15 +182,7 @@ def export_document(args: dict, **kwargs) -> str:
                 "error": "OUTPUT_MUST_BE_XLSX"
             })
 
-        child_env = os.environ.copy()
-        child_env.pop("PYTHONPATH", None)
-        child_env.pop("PYTHONHOME", None)
-        child_env.pop("VIRTUAL_ENV", None)
-        child_env["PATH"] = (
-            str(project_dir / ".venv" / "Scripts")
-            + os.pathsep
-            + child_env.get("PATH", "")
-        )
+        child_env = _child_env(project_dir)
 
         process = subprocess.run(
             [
@@ -258,11 +250,8 @@ def export_cv_report(args: dict, **kwargs) -> str:
         if not python_exe.exists() or not renderer.exists():
             return _result({"success": False, "error": "CV_REPORT_RUNTIME_NOT_FOUND"})
 
-        child_env = os.environ.copy()
-        child_env.pop("PYTHONPATH", None)
-        child_env.pop("PYTHONHOME", None)
-        child_env.pop("VIRTUAL_ENV", None)
-        child_env["PATH"] = str(project_dir / ".venv" / "Scripts") + os.pathsep + child_env.get("PATH", "")
+        child_env = _child_env(project_dir)
+
         process = subprocess.run(
             [str(python_exe), str(renderer), "--payload-json", "-", "--output", str(output)],
             cwd=str(project_dir),

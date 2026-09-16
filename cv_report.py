@@ -81,6 +81,80 @@ def render_report(payload: dict, output_path: Path) -> dict:
     return {"success": True, "template": "cv_review", "output_file": str(output_path.resolve()), "finding_count": len(payload["findings"] or [])}
 
 
+def render_personnel_docx(payload: dict, output_path: Path) -> None:
+    from docx import Document
+    from docx.enum.section import WD_ORIENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    doc = Document()
+    section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = Inches(0.35)
+    section.bottom_margin = Inches(0.35)
+    section.left_margin = Inches(0.25)
+    section.right_margin = Inches(0.25)
+
+    for text, size in [(payload.get('judul','DAFTAR TENAGA AHLI'), 11), (payload.get('wilayah',''), 10), (payload.get('pekerjaan',''), 10)]:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(text)
+        run.bold = True
+        run.font.name = 'Century Gothic'
+        run.font.size = Pt(size)
+
+    headers = ["No", "Nama Personel", "NIK", "Jabatan Personel", "Kualifikasi Pendidikan", "Sertifikat Keahlian", "Pengalaman min dalam KAK (Tahun)", "Pengalaman Kerja (Bulan)", "Pengalaman Kerja (Tahun)"]
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.style = 'Table Grid'
+    table.autofit = True
+
+    def set_cell_shading(cell, fill):
+        tcPr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), fill)
+        tcPr.append(shd)
+
+    def set_cell_text(cell, text, bold=False, size=7, align=WD_ALIGN_PARAGRAPH.CENTER):
+        cell.text = ''
+        p = cell.paragraphs[0]
+        p.alignment = align
+        run = p.add_run(str(text or ''))
+        run.bold = bold
+        run.font.name = 'Century Gothic'
+        run.font.size = Pt(size)
+
+    for i,h in enumerate(headers):
+        set_cell_text(table.rows[0].cells[i], h, bold=True, size=7)
+        set_cell_shading(table.rows[0].cells[i], '8EA9D8')
+
+    for no, person in enumerate(payload['personel'], 1):
+        months = person.get('pengalaman_kerja_bulan','')
+        years = person.get('pengalaman_kerja_tahun','')
+        years_display = '' if years == '' else f"{float(years):.2f}".replace('.', ',')
+        min_kak = person.get('pengalaman_min_kak_tahun','')
+        min_kak_display = f"{min_kak} Tahun" if min_kak not in (None, '') else ''
+        row_values = [
+            no,
+            person.get('nama_personel',''),
+            person.get('nik',''),
+            person.get('jabatan_personel',''),
+            person.get('kualifikasi_pendidikan',''),
+            person.get('sertifikat_keahlian',''),
+            min_kak_display,
+            months,
+            years_display,
+        ]
+        cells = table.add_row().cells
+        for col, val in enumerate(row_values):
+            align = WD_ALIGN_PARAGRAPH.LEFT if col in (1,2,3,4,5) else WD_ALIGN_PARAGRAPH.CENTER
+            set_cell_text(cells[col], val, size=6, align=align)
+
+    doc.save(output_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render laporan review CV ke DOCX")
     parser.add_argument("--payload-json", required=True, help="JSON payload atau '-' untuk stdin")

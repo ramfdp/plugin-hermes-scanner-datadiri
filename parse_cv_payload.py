@@ -23,14 +23,6 @@ for i,s in enumerate(starts):
     e = (starts[i+1]-1) if i+1 < len(starts) else len(pages)
     chunks.append((s,e))
 
-label_patterns = {
-    'jabatan_personel': [r'Posisi yang Diusulkan\s*:?\s*(.+)', r'^:?\s*(Team Leader|Tenaga Ahli|Ahli|Inspector|Operator|Drafter|Surveyor|Tenaga Pendukung|Administrasi).+'],
-    'nama_personel': [r'Nama Personi[ll]\s*:?\s*(.+)', r'Nama Personel\s*:?\s*(.+)'],
-    'pendidikan': [r'Pendidikan\s*:?\s*(.+)'],
-    'pengalaman': [r'Pengalaman Bekerja\s*:?\s*(.+)'],
-    'banyak': [r'Banyak Pengalaman Kerja\s*:?\s*(.+)'],
-}
-
 bad_values = {'', ':', '1', '2', '3', '4', '5', '6', '7'}
 
 def clean(s):
