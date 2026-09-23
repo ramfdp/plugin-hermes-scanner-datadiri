@@ -14,7 +14,10 @@ def scanner_review(args: dict, **kwargs) -> str:
         request = {**args, '_plugin_version': __version__, '_progress_operation': operation}
         result = tools._run_script('scanner.live_worker', 'REVIEW', [], payload=request, timeout=timeout)
         if not result.get('success'):
-            progress.interrupted(pid, operation)
+            # A controlled partial export already published an accurate terminal snapshot.
+            # Its nonzero CLI exit is not an interrupted worker and must stay partial.
+            if result.get('stage') != 'export_partial' or not result.get('artifacts'):
+                progress.interrupted(pid, operation)
             result.setdefault('workflow_complete', False)
         return tools._result(result)
     except Exception as exc:
