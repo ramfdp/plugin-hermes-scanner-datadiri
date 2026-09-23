@@ -94,7 +94,8 @@ class SyncTest(unittest.TestCase):
 
     def test_desktop_crlf_and_lf_are_equal_but_wrong_marker_is_reported(self):
         sync.apply_sync(self.plan(adopt_desktop=True))
-        source = (self.root / 'desktop/plugin.js').read_bytes()
+        # Normalize first: write_text already produces CRLF on Windows.
+        source = (self.root / 'desktop/plugin.js').read_bytes().replace(b'\r\n', b'\n')
         (self.desktop / 'plugin.js').write_bytes(source.replace(b'\n', b'\r\n'))
         self.assertTrue(compare_desktop(self.root, self.backend, self.desktop)['success'])
         marker = json.loads((self.desktop / MARKER).read_text())
