@@ -1,5 +1,5 @@
 name: hermes-scanner-datadiri
-version: 0.4.1
+version: 0.4.2
 description: Local GPU OCR, Excel-first CV/KAK review and PDF analysis
 provides_tools:
   - scan_document_ocr
