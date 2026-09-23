@@ -109,3 +109,16 @@ class LiveWorkflowTest(unittest.TestCase):
         self.assertFalse(result['success'])
         s = progress.read_snapshot(self.pid)
         self.assertEqual(s['status'], 'error'); self.assertEqual(s['pages_done'], 3)
+
+    def test_registered_adapter_preserves_a_controlled_partial_export(self):
+        def process(module, prefix, argv, **options):
+            op = options['payload']['_progress_operation']
+            with progress.tracking(self.pid, self.rid, 'reports', op):
+                progress.emit(status='partial', artifact_count=1, detail='retry_needed')
+            return {'success': False, 'stage': 'export_partial', 'artifacts': [{'name': 'synthetic.xlsx'}],
+                    'workflow_complete': False, 'return_code': 1}
+        with patch('scanner.tools._run_script', side_effect=process):
+            result = json.loads(live_tools.scanner_review({'action': 'export', 'run_id': self.rid}))
+        self.assertFalse(result['success'])
+        self.assertEqual(progress.read_snapshot(self.pid)['status'], 'partial')
+        self.assertEqual(progress.read_snapshot(self.pid)['artifact_count'], 1)
