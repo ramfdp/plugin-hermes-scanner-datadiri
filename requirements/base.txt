@@ -1,0 +1,6 @@
+# CPU-only report generation, validation and tests. No model download.
+openpyxl>=3.1,<4
+python-docx>=1.2,<2
+reportlab>=4.2,<5
+pypdfium2>=5,<6
+Pillow>=10,<13

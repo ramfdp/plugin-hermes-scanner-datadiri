@@ -1,25 +1,13 @@
-from . import schemas
-from . import tools
+"""Hermes loader entry point. Runtime implementation lives under scanner/."""
+from .scanner import schemas, tools, web
 
 
 def register(ctx):
-    ctx.register_tool(
-        name="scan_document_ocr",
-        toolset="hermes_scanner",
-        schema=schemas.SCAN_DOCUMENT_OCR,
-        handler=tools.scan_document_ocr,
-    )
-
-    ctx.register_tool(
-        name="export_document",
-        toolset="hermes_scanner",
-        schema=schemas.EXPORT_DOCUMENT,
-        handler=tools.export_document,
-    )
-
-    ctx.register_tool(
-        name="export_cv_report",
-        toolset="hermes_scanner",
-        schema=schemas.EXPORT_CV_REPORT,
-        handler=tools.export_cv_report,
-    )
+    for contract, handler in (
+        (schemas.SCAN_DOCUMENT_OCR, tools.scan_document_ocr),
+        (schemas.EXPORT_DOCUMENT, tools.export_document),
+        (schemas.EXPORT_CV_REPORT, tools.export_cv_report),
+        (schemas.SCANNER_REVIEW, tools.scanner_review),
+        (schemas.SCANNER_WEB_LOOKUP, web.make_handler(ctx)),
+    ):
+        ctx.register_tool(name=contract['name'], toolset='hermes_scanner', schema=contract, handler=handler)

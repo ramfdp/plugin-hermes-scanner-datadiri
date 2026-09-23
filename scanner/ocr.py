@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import json
 import os
 import re
@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = BASE_DIR / "output"
 MODEL_ID = "opendatalab/MinerU2.5-Pro-2604-1.2B"
 DEFAULT_MODEL_DIR = BASE_DIR / "models" / MODEL_ID.split("/")[-1]
@@ -38,9 +38,7 @@ def build_mineru_client(model_dir):
     model_dir = Path(model_dir).expanduser().resolve()
     for name in ("config.json", "model.safetensors", "tokenizer.json", "preprocessor_config.json"):
         if not (model_dir / name).is_file():
-            raise FileNotFoundError(f"Model lokal belum lengkap: {model_dir / name}. Jalankan python download_model.py")
-
-    # No model lookup, telemetry, or download during document processing.
+            raise FileNotFoundError(f"Model lokal belum lengkap: {model_dir / name}. Jalankan python scripts/download_model.py")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -48,20 +46,17 @@ def build_mineru_client(model_dir):
     import torch
     from mineru_vl_utils import MinerUClient
     from mineru_vl_utils.transformers_loading import load_transformers_model, load_transformers_processor
-
     if not torch.cuda.is_available():
         raise RuntimeError("PyTorch CUDA/GPU tidak tersedia. Pasang wheel CUDA sesuai README; tidak fallback ke CPU.")
     model = load_transformers_model(str(model_dir), device_map={"": "cuda:0"})
     model.eval()
     processor = load_transformers_processor(str(model_dir))
-    # ponytail: one page and one recognition batch for 6 GB VRAM; tune after measurement.
     return MinerUClient(backend="transformers", model=model, processor=processor,
                         batch_size=1, max_concurrency=1, use_tqdm=False, image_analysis=False)
 
 
 def iter_page_images(input_path):
     from PIL import Image, ImageOps, ImageSequence
-
     if input_path.suffix.lower() == ".pdf":
         import pypdfium2 as pdfium
         document = pdfium.PdfDocument(str(input_path))
@@ -92,7 +87,6 @@ def iter_page_images(input_path):
 def run_mineru(input_path, output_dir, model_dir):
     client = build_mineru_client(model_dir)
     from mineru_vl_utils.post_process import json2md
-
     page_count = 0
     pages = iter_page_images(input_path)
     try:
@@ -130,7 +124,6 @@ def main():
     if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
         send_result({"success": False, "error": "UNSUPPORTED_FILE_TYPE", "allowed_extensions": sorted(ALLOWED_EXTENSIONS)})
         raise SystemExit(1)
-
     output_dir = Path(args.output_dir).expanduser().resolve() / f"{input_path.stem}_{datetime.now():%Y%m%d_%H%M%S_%f}"
     start = perf_counter()
     try:
