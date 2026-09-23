@@ -165,7 +165,8 @@ class RuntimeTest(unittest.TestCase):
             self.assertTrue(result['success']); options = run.call_args.kwargs
             self.assertFalse(options['shell']); self.assertEqual(options['encoding'], 'utf-8')
             self.assertEqual(options['timeout'], 45 if prefix == 'OCR' else 120)
-            self.assertEqual(options['cwd'], str(self.root))
+            # Windows may return an 8.3 TEMP alias; compare resolved directories.
+            self.assertEqual(Path(options['cwd']).resolve(), self.root.resolve())
             self.assertEqual(run.call_args.args[0][1], '-m')
 
     def test_nonzero_and_last_marker_never_hide_failures(self):
