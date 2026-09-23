@@ -1,5 +1,5 @@
 """Hermes loader entry point. Runtime implementation lives under scanner/."""
-from .scanner import schemas, tools, web
+from .scanner import schemas, tools
 
 
 def register(ctx):
@@ -8,6 +8,6 @@ def register(ctx):
         (schemas.EXPORT_DOCUMENT, tools.export_document),
         (schemas.EXPORT_CV_REPORT, tools.export_cv_report),
         (schemas.SCANNER_REVIEW, tools.scanner_review),
-        (schemas.SCANNER_WEB_LOOKUP, web.make_handler(ctx)),
+        (schemas.SCANNER_WEB_LOOKUP, tools.ordered_web_handler(ctx)),
     ):
         ctx.register_tool(name=contract['name'], toolset='hermes_scanner', schema=contract, handler=handler)

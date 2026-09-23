@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 
-function harness(request, sourceTransform = value => value) {
+function harness(request, sourceTransform = value => value, mountFirst = true) {
   let cursor = 0
   const hooks = [], calls = [], notices = []
   let session = 'session-1'
@@ -32,13 +32,13 @@ function harness(request, sourceTransform = value => value) {
   const set = (index, value) => inputs()[index].props.onChange({ target: { value, files: value, checked: value } })
   const file = name => ({ name, path: `C:\\Docs\\${name}`, size: 100 })
   function configure() { set(0, 'Paket Uji'); set(1, '2026-09-23'); set(2, '2'); set(3, [file('a.pdf'), file('b.pdf')]); set(4, [file('kak.pdf')]) }
-  render()
+  if (mountFirst) render()
   const registrations = []
   sdk.api.plugin.register({ register: entry => registrations.push(entry) })
   const command = registrations.find(e => e.area === 'middleware').data.handler
   assert.equal(command({ text: '/scanner-data' }), null)
   render()
-  return { calls, notices, configure, set, file, api: sdk.api, command, changeSession: value => { session = value },
+  return { calls, notices, configure, set, file, api: sdk.api, command, render, registrations, changeSession: value => { session = value },
     start: () => flatten(render()).find(n => n.type === 'button').props.onClick() }
 }
 
@@ -106,10 +106,35 @@ test('non-scanner drafts are preserved and prompt treats source text as untruste
   assert.match(h.api.localDate(), /^\d{4}-\d{2}-\d{2}$/)
 })
 
-
 test('Windows CRLF checkout is supported by the SDK test harness', async () => {
   const h = harness(null, source => source.replace(/\r?\n/g, '\r\n'))
-  h.configure()
-  await h.start()
+  h.configure(); await h.start()
   assert.equal(h.calls.filter(call => call.name === 'prompt.submit').length, 1)
+})
+
+test('slash command arriving before dialog mount is queued rather than swallowed', () => {
+  const h = harness(null, value => value, false)
+  assert.equal(h.render().props.open, true)
+  assert.equal(h.calls.length, 0)
+  assert.ok(h.notices.some(n => n.message.includes('Menyiapkan dialog')))
+})
+
+test('workflow prompt requires summary before web and prohibits ad-hoc code repair', () => {
+  const h = harness()
+  const prompt = h.api.scannerPrompt({ project: 'Test', documents: [] })
+  assert.ok(prompt.indexOf('4. Panggil action="summary"') < prompt.indexOf('5. Setelah summary berhasil'))
+  assert.match(prompt, /workflow_complete=true/)
+  assert.match(prompt, /Jangan mengedit source, membuat shim ocr_runner.py/)
+  assert.match(prompt, /"workflow_version":"0.4.1"/)
+  assert.match(prompt, /Hanya gunakan path dalam manifest/)
+})
+
+test('visible Scanner action opens the same dialog without submitting a model prompt', () => {
+  const h = harness()
+  const action = h.registrations.find(e => e.area === 'actions').render()
+  const button = action.props.children.find(node => node.type === 'button')
+  h.render().props.onOpenChange(false)
+  button.props.onClick()
+  assert.equal(h.render().props.open, true)
+  assert.equal(h.calls.length, 0)
 })
