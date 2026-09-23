@@ -36,7 +36,7 @@ def main():
         result['installation'] = compare_installation(ROOT, selected['backend'], selected['desktop'])
         result['success'] = result['installation']['success'] and result['runtime_root_matches']
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    print('Lihat docs/SESSION_AND_SYNC.md. Setelah sync, restart backend dan Reload desktop plugins; popup harus v0.4.2.')
+    print(f'Lihat docs/SESSION_AND_SYNC.md. Setelah sync, restart backend dan Reload desktop plugins; popup harus v{__version__}.')
     if result.get('success') is False:
         raise SystemExit(1)
 
