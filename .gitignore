@@ -7,3 +7,5 @@ output/
 *.log
 /graphify-out
 /models/
+/cv_outputs/
+/cv_extract_work/

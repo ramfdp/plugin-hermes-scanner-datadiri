@@ -1,67 +1,70 @@
-﻿# hermes-scanner-datadiri
+# hermes-scanner-datadiri
 
-Plugin Hermes untuk membaca CV, KAK, dan lampiran secara offline dengan [MinerU2.5-Pro-2604-1.2B](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B), lalu membuat laporan review DOCX/Excel.
+Plugin Hermes untuk OCR lokal CV, KAK, dan lampiran memakai MinerU2.5-Pro-2604-1.2B, kemudian mengekspor data yang dipetakan Hermes menjadi Excel atau laporan review DOCX.
 
 ## Setup Windows NVIDIA
 
-Jalankan dari folder proyek menggunakan Python 3.12:
+Gunakan Python 3.12 dari folder runtime:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe download_model.py
 $env:HERMES_SCANNER_PROJECT = (Get-Location).Path
+hermes plugins install ramfdp/plugin-hermes-scanner-datadiri --enable
 ```
 
-Setup memerlukan internet. Model dipin pada revisi `d3f5e08d073c21466bbabe21c71bb1e9c2e595da` dan disimpan di `models/MinerU2.5-Pro-2604-1.2B/`. Folder model tidak masuk Git. Bobot model sekitar 2,31 GB, di luar paket PyTorch CUDA.
+Setup memerlukan internet. Model dipin pada revisi `d3f5e08d073c21466bbabe21c71bb1e9c2e595da` dan disimpan di `models/MinerU2.5-Pro-2604-1.2B/`. Set `HERMES_MINERU_MODEL_DIR` untuk memakai salinan model di lokasi lain. Model dan `.venv/` tidak masuk Git.
 
-Untuk pemasangan ulang tanpa internet, simpan wheel sesuai Python/Windows Anda dan salin folder `models/`:
+Runtime menggunakan backend Transformers dari `mineru-vl-utils` pada `cuda:0`, batch satu. GPU CUDA wajib tersedia; tidak ada fallback CPU atau layanan OCR online. Pastikan model dan dependensi sudah terpasang sebelum mematikan internet.
+
+Untuk instalasi ulang offline, simpan wheel yang sesuai Python/Windows dan salin folder model:
 
 ```powershell
 .venv\Scripts\python.exe -m pip download -r requirements.txt -d output/setup-wheels
 .venv\Scripts\python.exe -m pip install --no-index --find-links output/setup-wheels -r requirements.txt
 ```
 
-Runtime memakai backend Transformers dari `mineru-vl-utils` dan GPU `cuda:0`, batch satu untuk VRAM 6 GB. GPU wajib tersedia; tidak ada fallback CPU maupun layanan OCR online. Model hanya dibaca dari disk dengan mode Hugging Face/Transformers offline. `HERMES_MINERU_MODEL_DIR` dapat menunjuk salinan model di lokasi lain. Dependensi dan model harus terpasang sebelum internet dimatikan.
-
-## OCR lokal
+## OCR dan tool Hermes
 
 ```powershell
 .venv\Scripts\python.exe ocr_runner.py "C:\dokumen\cv.pdf" --text-only
 ```
 
-PDF dirender satu halaman per giliran pada 200 DPI. Gambar dan TIFF multi-frame juga didukung. Setiap halaman langsung menghasilkan `page_0001.md`, `page_0001.json`, dan seterusnya di subfolder unik `output/`. JSON berisi `model`, `input_path`, `page_index` (mulai nol), dan `blocks` asli MinerU. Format JSON backend lama tidak digunakan lagi; output lama tetap tersedia sebagai arsip.
+PDF dirender satu halaman per giliran pada 200 DPI; gambar dan TIFF multi-frame juga didukung. Setiap halaman menghasilkan Markdown dan JSON layout di subfolder unik `output/`. Mode `--text-only` tetap mengembalikan teks lengkap dan path hasil, tanpa menyertakan layout JSON dalam respons agent.
 
-Respons `HERMES_OCR_RESULT` tetap menyediakan `success`, `ocr_text`, `page_count`, `json_files`, `markdown_files`, dan `output_dir`, ditambah nama model dan durasi. Hermes meminta `--text-only` agar JSON layout tidak membengkakkan konteks; CLI tanpa flag ini juga menyertakan `ocr_json`. Kegagalan mengembalikan `MINERU_OCR_ERROR` beserta folder hasil parsial, bukan sukses yang menutupi halaman gagal. Hermes menunggu hasil akhir dengan batas default 7.200 detik, dapat diatur lewat `HERMES_OCR_TIMEOUT_SECONDS` (bilangan bulat positif). Batas ini mencegah PDF panjang terputus pada batas lama 20 menit; bukan klaim percepatan inferensi.
+Tiga tool tetap tersedia:
 
-## Instalasi dan alur Hermes
+- `scan_document_ocr`: OCR CV, KAK, dan setiap lampiran. Berhenti jika `success=false`; hasil parsial tetap disimpan oleh runner.
+- `export_document`: Excel `.xlsx` dengan template `daftar_tenaga_ahli`.
+- `export_cv_report`: laporan review `.docx` dari hasil pemetaan dan validasi Hermes. Renderer tidak melakukan atau mengarang verifikasi internet.
+
+Batas tunggu OCR default 7.200 detik, diatur lewat `HERMES_OCR_TIMEOUT_SECONDS` yang harus berupa bilangan bulat positif. Batas tunggu ekspor 120 detik. Proses dengan exit code bukan nol, respons marker tidak valid, atau file ekspor yang tidak terbentuk tidak dilaporkan sebagai sukses.
+
+Payload Excel wajib berisi `judul`, `wilayah`, `pekerjaan`, dan `personel` berupa array object. Validasi berada di `exporter.py`; instalasi bersih tidak memerlukan `templates/daftar_tenaga_ahli/schema.json`. Dukungan CLI `--payload` (file JSON, termasuk UTF-8 BOM) serta `--payload-json` (JSON langsung atau `-` untuk stdin) tetap tersedia.
+
+Payload review DOCX wajib berisi `cv_file`, `biodata`, `experience_validation`, `attachment_cross_check`, dan `findings`. Kedua renderer Word, termasuk `render_personnel_docx` untuk tabel personel, menggunakan dependensi `python-docx` yang sudah ada.
+
+UI Desktop `/scanner-data`, nama tool, schema tool, dan mesin OCR dipertahankan. Pastikan `HERMES_SCANNER_PROJECT` mengarah ke runtime yang sudah diperbarui dan restart Hermes setelah memperbarui plugin. Memperbarui salinan plugin saja tidak memperbarui folder runtime terpisah tersebut.
+
+## Migrasi dan arsip lokal
+
+`finish_migration.ps1` tetap disediakan untuk migrasi lokal setelah OCR diverifikasi. Script menggunakan `HERMES_HOME`, memperbarui salinan plugin terpasang, dan menghapus hanya dua cache model Paddle lama. Script tidak dijalankan otomatis saat cleanup ini.
+
+Folder `cv_outputs/` dan empat skrip khusus pekerjaan lama (`batch_cv_ocr.py`, `parse_cv_payload.py`, `finalize_cv_outputs.py`, `update_education_and_regen.py`) dikeluarkan dari distribusi. Data hasil pekerjaan bukan konfigurasi runtime. `local_only_report.py` dan contoh pengujian manual tetap dipertahankan.
+
+**Sebelum checkout atau merge cleanup pada komputer yang memiliki hasil kerja, salin `cv_outputs/` dan data penting ke lokasi arsip di luar repo.** Git dapat menghapus file yang sebelumnya dilacak ketika mengambil perubahan penghapusan. `.gitignore` mencegah tracking baru, bukan mekanisme backup. Cleanup ini tidak menulis ulang riwayat Git: data pada commit lama tetap ada dan pembersihan history harus dikoordinasikan terpisah.
+
+## Pengujian
 
 ```powershell
-hermes plugins install ramfdp/plugin-hermes-scanner-datadiri --enable
+.venv\Scripts\python.exe -m unittest discover -v
 ```
 
-Instalasi dari GitHub mengambil versi yang sudah dipublikasikan; perubahan lokal ini perlu dimuat oleh instalasi plugin Anda. Set `HERMES_SCANNER_PROJECT` ke folder runtime ini dan restart Hermes setelah pembaruan plugin.
+Tes mencakup respons OCR 36 halaman dengan model tiruan, urutan teks dan JSON lokal, hasil parsial saat gagal, rendering PDF/TIFF, isolasi environment, ekspor dari direktori bersih, NIK sebagai teks, nilai nol, Unicode stdin, dan respons subprocess yang gagal. Dua file test awal dipertahankan dan ditambah `test_exporters.py` serta `test_tool_runtime.py`.
 
-Untuk mengganti salinan plugin yang sudah terpasang, setelah tes OCR berhasil jalankan `./finish_migration.ps1` dari PowerShell lokal. Script menggunakan `HERMES_HOME`, membackup empat file plugin lama ke `output/`, menyalin versi lokal, dan menghapus hanya cache `PaddleOCR-VL-1.6` serta `PP-DocLayoutV3` di profil pengguna. Restart Hermes setelah selesai. Lokasi plugin terpasang dan cache lama berada di luar workspace agen.
+Tes CPU tidak menggantikan pengujian OCR GPU nyata, versi dependensi yang dipin, dan Hermes Desktop pada Windows. Refactor ini tidak mengklaim peningkatan kecepatan inferensi atau pengurangan ukuran model.
 
-1. `scan_document_ocr` membaca CV, KAK, dan setiap lampiran secara lokal.
-2. Hermes memetakan biodata dan pengalaman dari `ocr_text`.
-3. Hermes memvalidasi klaim pekerjaan dengan sumber internet yang dicatat; ini terpisah dari OCR offline dan web bukan bukti tunggal.
-4. Hermes mencocokkan CV dengan lampiran dan menyusun temuan.
-5. `export_cv_report` membuat DOCX; `export_document` tetap tersedia untuk template Excel tenaga ahli.
+## Privasi
 
-## Pemeriksaan
-
-```powershell
-.venv\Scripts\python.exe -m unittest test_ocr_response -q
-```
-
-Tes regresi menggunakan model tiruan untuk memeriksa respons 36 halaman, urutan teks, file JSON lokal, dan pemanggilan Hermes. Pengujian GPU nyata memerlukan model yang sudah diunduh.
-
-Verifikasi lokal pada RTX 3050 Laptop 6 GB: satu halaman CV berhasil diproses offline dalam 105,159 detik termasuk pemuatan model, tanpa percobaan koneksi keluar. Puncak alokasi PyTorch 2.519 MiB. Hasil berisi 47 blok teks/judul/tabel/list. Ini pengukuran satu halaman, bukan jaminan waktu PDF 36 halaman.
-
-Pengulangan melalui `scan_document_ocr` berhasil dalam 168,044 detik (166,643 detik di runner), dengan teks lengkap dan tanpa JSON layout tertanam di respons. Variasi ini menunjukkan migrasi tidak menjamin percepatan pada setiap pemanggilan.
-
-## Keamanan
-
-`confidential-redactor` tetap aktif untuk konteks Hermes/chat. Nilai sensitif hanya disimpan pada output lokal yang dikendalikan pengguna. OCR tidak mengirim dokumen ke layanan eksternal.
+Model OCR dibaca lokal dengan mode offline. Teks hasil OCR dikembalikan ke Hermes, sehingga privasi tahap chat dan verifikasi web bergantung pada konfigurasi Hermes, provider model, serta redactor yang digunakan. Jangan menganggap seluruh alur offline hanya karena tahap OCR lokal. Jangan commit CV, NIK, hasil ekspor, payload pribadi, atau kredensial ke repo.
