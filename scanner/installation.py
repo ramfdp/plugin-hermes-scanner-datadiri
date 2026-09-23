@@ -88,7 +88,9 @@ def compare_installation(runtime_root, installed_root, desktop_root=None):
     runtime = Path(runtime_root).expanduser().resolve()
     installed = Path(installed_root).expanduser().resolve()
     files = {Path('__init__.py'), Path('plugin.yaml')}
-    for folder, pattern in (('scanner', '*.py'), ('desktop', '*.js'), ('docs', '*.md')):
+    if (runtime / 'scanner/live_tools.py').is_file():
+        files.update((Path('dashboard/manifest.json'), Path('dashboard/plugin_api.py')))
+    for folder, pattern in (('scanner', '*.py'), ('desktop', '*.js'), ('docs', '*.md'), ('dashboard', '*.py'), ('dashboard', '*.json')):
         files.update(path.relative_to(runtime) for path in (runtime / folder).rglob(pattern))
     missing_source, missing_installed, different = [], [], []
     for relative in sorted(files):

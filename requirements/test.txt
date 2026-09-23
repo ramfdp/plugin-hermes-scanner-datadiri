@@ -1,0 +1,4 @@
+# HTTP route integration tests only. Hermes already supplies FastAPI at runtime.
+-r base.txt
+fastapi>=0.115,<1
+httpx>=0.27,<1
