@@ -1,7 +1,9 @@
 name: hermes-scanner-datadiri
-version: 0.3.0
-description: Offline MinerU 2.5 Pro CV, KAK, and attachment OCR plus CV review report
+version: 0.4.0
+description: Local multi-CV OCR, evidence-based KAK and certificate review, Excel and PDF reports
 provides_tools:
   - scan_document_ocr
   - export_document
   - export_cv_report
+  - scanner_review
+  - scanner_web_lookup

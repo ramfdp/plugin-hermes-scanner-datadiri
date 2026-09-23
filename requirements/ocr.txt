@@ -1,0 +1,7 @@
+# Original Windows/CUDA pins retained. Install this only for the actual OCR machine.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.10.0+cu128
+torchvision==0.25.0+cu128
+mineru-vl-utils[transformers]==2.0.4
+transformers==5.10.1
+pypdfium2==5.13.0
