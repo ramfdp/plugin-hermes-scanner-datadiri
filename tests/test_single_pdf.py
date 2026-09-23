@@ -67,7 +67,8 @@ class SinglePDFTest(unittest.TestCase):
         self.assertEqual(len(result['documents']), 1)
 
         def extract(input_path, output, model_dir):
-            self.assertEqual(input_path, path)
+            # Windows TEMP may use an 8.3 alias; compare the actual file identity.
+            self.assertTrue(input_path.samefile(path))
             for n, text in enumerate(pages, 1):
                 (output / f'page_{n:04d}.md').write_text(text, encoding='utf-8')
                 (output / f'page_{n:04d}.json').write_text('{}', encoding='utf-8')
