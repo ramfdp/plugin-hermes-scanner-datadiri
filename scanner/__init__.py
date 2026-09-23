@@ -1,2 +1,2 @@
-"""Local OCR and evidence-based document review for Hermes."""
-__version__ = '0.4.1'
+"""Scanner Data Diri runtime. Heavy dependencies are loaded only by worker modules."""
+__version__ = "0.4.2"

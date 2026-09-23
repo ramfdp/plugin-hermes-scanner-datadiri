@@ -1,33 +1,33 @@
-# Back up first, then sync the whole plugin package. Never remove model caches or user outputs.
-[CmdletBinding(SupportsShouldProcess)]
-param()
+# Preview and sync both plugin locations. Run with -WhatIf before applying.
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+param(
+    [string]$HermesHome = $env:HERMES_HOME,
+    [string]$DesktopHome,
+    [string]$PluginDir,
+    [string]$DesktopPluginDir,
+    [string]$PythonExe,
+    [switch]$AdoptDesktop
+)
 $ErrorActionPreference = 'Stop'
-if (-not $env:HERMES_HOME) { throw 'HERMES_HOME belum disetel.' }
 $root = Split-Path -Parent $PSScriptRoot
-$target = Join-Path $env:HERMES_HOME 'plugins/hermes-scanner-datadiri'
-if (-not (Test-Path -LiteralPath $target -PathType Container)) { throw "Plugin tidak ditemukan: $target" }
-if ([IO.Path]::GetFullPath($root) -eq [IO.Path]::GetFullPath($target)) { throw 'Source dan target sama; tidak perlu sync.' }
-if ((Get-Item -LiteralPath $target).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Target plugin berupa link/junction; gunakan instalasi langsung yang terkontrol.' }
-$backup = Join-Path $root ('output/plugin-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
-$copyNames = @('__init__.py', 'plugin.yaml', 'scanner', 'desktop', 'docs', 'requirements', 'requirements.txt')
-$legacyNames = @('tools.py', 'schemas.py', 'ocr_runner.py', 'exporter.py', 'cv_report.py', 'download_model.py', 'finish_migration.ps1', 'local_only_report.py')
-foreach ($name in $copyNames) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $name))) { throw "Source tidak lengkap: $name" }
+if (-not $PythonExe) {
+    $PythonExe = Join-Path $root '.venv/Scripts/python.exe'
 }
-if ($PSCmdlet.ShouldProcess($target, 'Backup lalu sync plugin 0.4')) {
-    New-Item -ItemType Directory -Path $backup | Out-Null
-    foreach ($name in ($copyNames + $legacyNames)) {
-        $old = Join-Path $target $name
-        if (Test-Path -LiteralPath $old) { Copy-Item -LiteralPath $old -Destination $backup -Recurse }
-    }
-    foreach ($name in $copyNames) {
-        $source = Join-Path $root $name
-        Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
-    }
-    foreach ($name in $legacyNames) {
-        $old = Join-Path $target $name
-        if (Test-Path -LiteralPath $old -PathType Leaf) { Remove-Item -LiteralPath $old -Force }
-    }
-    Write-Host "Backup: $backup"
-    Write-Host 'Sync selesai. Periksa HERMES_SCANNER_PROJECT, restart Hermes/gateway dan reload plugin Desktop.'
+if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+    throw "Python proyek tidak ditemukan: $PythonExe. Gunakan -PythonExe untuk interpreter yang benar."
+}
+$arguments = @((Join-Path $PSScriptRoot 'sync_plugin.py'))
+foreach ($item in @(
+    @('--hermes-home', $HermesHome), @('--desktop-home', $DesktopHome),
+    @('--plugin-dir', $PluginDir), @('--desktop-plugin-dir', $DesktopPluginDir)
+)) {
+    if ($item[1]) { $arguments += $item }
+}
+if ($AdoptDesktop) { $arguments += '--adopt-desktop' }
+# Preview is read-only, including under -WhatIf; no backup directory is created.
+& $PythonExe @arguments
+if ($LASTEXITCODE -ne 0) { throw 'Preview gagal; tidak ada sinkronisasi dilakukan.' }
+if ($PSCmdlet.ShouldProcess('Paket backend dan salinan app-level Desktop pada preview', 'Backup lalu sinkronkan Scanner')) {
+    & $PythonExe @arguments --apply
+    if ($LASTEXITCODE -ne 0) { throw 'Sync gagal. Baca pesan dan lokasi backup di atas sebelum mencoba lagi.' }
 }

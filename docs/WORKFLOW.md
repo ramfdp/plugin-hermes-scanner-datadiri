@@ -1,8 +1,8 @@
-# Workflow Desktop 0.4.1: Excel dahulu, lalu web dan PDF
+# Workflow Desktop 0.4.2: Excel dahulu, lalu web dan PDF
 
-Bagian ini mengatur URUTAN untuk `/scanner-data`; format bukti rinci tetap mengikuti REVIEW_FORMAT.md. Untuk run baru, instruksi urutan lama pada dokumen tersebut digantikan urutan di sini.
+Bagian ini mengatur URUTAN untuk `/scanner-data`; format bukti rinci tetap mengikuti REVIEW_FORMAT.md. Untuk run baru, instruksi urutan lama pada dokumen tersebut digantikan urutan di sini. Penanganan chat baru dan sinkronisasi popup: lihat [SESSION_AND_SYNC.md](SESSION_AND_SYNC.md).
 
-1. `/scanner-data` dibaca middleware Desktop dan membuka dialog. Memilih file tidak menjalankan OCR. Tombol Mulai pemeriksaan mengirim manifest ke sesi chat yang sama.
+1. `/scanner-data` dibaca middleware Desktop dan membuka dialog. Memilih file tidak menjalankan OCR. Tombol Mulai pemeriksaan menyiapkan sesi bila halaman masih draft kosong, mengaktifkannya, lalu mengirim manifest ke sesi yang sama. Tidak perlu pesan percobaan terlebih dahulu.
 2. Panggil `scanner_review(action="health")`, lalu `help`. Jika tool tidak tersedia, versi tidak cocok, atau runtime hilang: hentikan dengan pesan sinkronisasi. Jangan mencari dokumen lain, membuat shim `ocr_runner.py`, mengedit source, menjalankan Graphify, atau memperbaiki instalasi otomatis.
 3. `start` menggunakan HANYA manifest file pilihan pengguna. OCR SETIAP `document_id`, baca seluruh hasil melalui `read_document` dan next. KAK berisi kriteria/jabatan, bukan nama personel. Jangan menganggap selesai membaca KAK berarti CV sudah diproses.
 4. `plan`: roster seluruh orang, coverage halaman, inventory sertifikat, dan requirements. KAK metadata boleh belum diautentikasi; `receipt_ids=[]` dahulu. Jangan lakukan pencarian web sebelum summary.
@@ -30,6 +30,6 @@ Wajib satu baris per ID roster. Isi yang tidak tersedia menggunakan string koson
 
 ## Penyebab umum screenshot hanya berisi OCR
 
-Repo runtime dan plugin terpasang adalah dua salinan berbeda. Versi 0.4+ memakai `python -m scanner.ocr`, bukan runner di root. Bila chat masih membuat/mencari `ocr_runner.py`, periksa salinan plugin terpasang dan chat lama, bukan menambah file shim lagi. Lihat `scripts/doctor.py --compare-installed`, jalankan sinkronisasi dari root runtime, restart backend/gateway dan reload Desktop. Gunakan chat baru dan ketik `/scanner-data`, bukan hanya "oke jalankan scan" dalam alur OCR sebelumnya.
+Repo runtime, paket backend terpasang, dan popup app-level Desktop adalah tiga lokasi yang perlu dibandingkan. Versi 0.4+ memakai `python -m scanner.ocr`, bukan runner di root. Bila chat masih membuat/mencari `ocr_runner.py`, periksa ketiga salinan dan chat lama, bukan menambah file shim lagi. Lihat `scripts/doctor.py --compare-installed` dan [SESSION_AND_SYNC.md](SESSION_AND_SYNC.md), sinkronkan dari root runtime, restart backend/gateway dan reload Desktop. Gunakan chat baru dan ketik `/scanner-data`, bukan hanya "oke jalankan scan" dalam alur OCR sebelumnya. Popup harus menunjukkan v0.4.2.
 
 Implementasi ini mengontrol urutan tool plugin, bukan menjamin model tidak pernah keluar dari instruksi atau mengontrol tool web lain secara global. Uji pada versi Hermes Desktop terpasang sebelum penggunaan produksi.
