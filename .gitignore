@@ -7,4 +7,9 @@ output/
 *.log
 /graphify-out
 /models/
+<<<<<<< HEAD
 .xlsx
+=======
+/cv_outputs/
+/cv_extract_work/
+>>>>>>> 47b178571b83a89922cbff90af5c0b5f00dff3c2

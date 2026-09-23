@@ -1,8 +1,14 @@
 import argparse
 import json
-import zipfile
+import sys
 from pathlib import Path
-from xml.sax.saxutils import escape
+
+from docx import Document
+from docx.enum.section import WD_ORIENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt
 
 
 def text(value) -> str:
@@ -13,29 +19,23 @@ def text(value) -> str:
     return str(value)
 
 
-def paragraph(value: str, style: str = "Normal") -> str:
-    return f'<w:p><w:pPr><w:pStyle w:val="{style}"/></w:pPr><w:r><w:t xml:space="preserve">{escape(text(value))}</w:t></w:r></w:p>'
-
-
-def table(rows) -> str:
-    body = []
+def _add_table(document, rows):
+    table = document.add_table(rows=0, cols=len(rows[0]))
+    table.style = "Table Grid"
     for row in rows:
-        cells = "".join(f"<w:tc><w:tcPr/><w:p><w:r><w:t xml:space=\"preserve\">{escape(text(value))}</w:t></w:r></w:p></w:tc>" for value in row)
-        body.append(f"<w:tr>{cells}</w:tr>")
-    return '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single"/><w:left w:val="single"/><w:bottom w:val="single"/><w:right w:val="single"/><w:insideH w:val="single"/><w:insideV w:val="single"/></w:tblBorders></w:tblPr>' + "".join(body) + "</w:tbl>"
-
-
-def key_value_table(values: dict) -> str:
-    rows = [["Field", "Nilai"]]
-    rows.extend([[key.replace("_", " ").title(), value] for key, value in values.items()])
-    return table(rows)
+        for cell, value in zip(table.add_row().cells, row):
+            cell.text = text(value)
+    return table
 
 
 def render_report(payload: dict, output_path: Path) -> dict:
     required = ("cv_file", "biodata", "experience_validation", "attachment_cross_check", "findings")
+    if not isinstance(payload, dict):
+        raise ValueError("Payload harus berupa object.")
     missing = [key for key in required if key not in payload]
     if missing:
         raise ValueError("Field wajib belum tersedia: " + ", ".join(missing))
+<<<<<<< HEAD
     for key in ("experience_validation", "attachment_cross_check", "employer_validation"):
         rows = payload.get(key, [])
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
@@ -64,17 +64,44 @@ def render_report(payload: dict, output_path: Path) -> dict:
     parts.append(key_value_table(biodata))
 
     parts.append(paragraph("2. Kesesuaian Pengalaman dengan Posisi dalam KAK", "Heading1"))
+=======
+    for key in ("experience_validation", "attachment_cross_check", "findings", "internet_sources"):
+        value = payload.get(key)
+        if value is not None and not isinstance(value, list):
+            raise ValueError(f"'{key}' harus berupa array/list.")
+>>>>>>> 47b178571b83a89922cbff90af5c0b5f00dff3c2
     experience = payload["experience_validation"] or []
-    rows = [["Posisi/Kriteria KAK", "Klaim CV", "Validasi Internet", "Status", "Catatan"]]
-    rows.extend([[item.get("kak_requirement", ""), item.get("cv_claim", ""), item.get("internet_validation", ""), item.get("status", "belum diverifikasi"), item.get("notes", "")] for item in experience])
-    parts.append(table(rows if experience else [["Tidak ada pengalaman yang dapat divalidasi."]]))
-
-    parts.append(paragraph("3. Cross-check CV dan Lampiran", "Heading1"))
     cross_checks = payload["attachment_cross_check"] or []
-    rows = [["Lampiran", "Field", "CV", "Lampiran", "Status/Catatan"]]
-    rows.extend([[item.get("attachment", ""), item.get("field", ""), item.get("cv_value", ""), item.get("attachment_value", ""), item.get("status", "")] for item in cross_checks])
-    parts.append(table(rows if cross_checks else [["Tidak ada lampiran yang dicross-check."]]))
+    if any(not isinstance(item, dict) for item in [*experience, *cross_checks]):
+        raise ValueError("Item validasi pengalaman dan cross-check harus berupa object.")
 
+    document = Document()
+    document.add_paragraph("LAPORAN REVIEW CV", "Title")
+    document.add_paragraph("Dokumen hasil pemetaan biodata, validasi pengalaman, dan cross-check lampiran.")
+    document.add_paragraph(f"File CV: {payload['cv_file']}")
+    if payload.get("kak_file"):
+        document.add_paragraph(f"File KAK: {payload['kak_file']}")
+
+    document.add_heading("1. Pemetaan Biodata", 1)
+    biodata = payload["biodata"] if isinstance(payload["biodata"], dict) else {"biodata": payload["biodata"]}
+    _add_table(document, [["Field", "Nilai"], *[
+        [key.replace("_", " ").title(), value] for key, value in biodata.items()
+    ]])
+
+    document.add_heading("2. Kesesuaian Pengalaman dengan Posisi dalam KAK", 1)
+    rows = [["Posisi/Kriteria KAK", "Klaim CV", "Validasi Internet", "Status", "Catatan"]]
+    rows.extend([[item.get("kak_requirement", ""), item.get("cv_claim", ""),
+                  item.get("internet_validation", ""), item.get("status", "belum diverifikasi"),
+                  item.get("notes", "")] for item in experience])
+    _add_table(document, rows if experience else [["Tidak ada pengalaman yang dapat divalidasi."]])
+
+    document.add_heading("3. Cross-check CV dan Lampiran", 1)
+    rows = [["Lampiran", "Field", "CV", "Lampiran", "Status/Catatan"]]
+    rows.extend([[item.get("attachment", ""), item.get("field", ""), item.get("cv_value", ""),
+                  item.get("attachment_value", ""), item.get("status", "")] for item in cross_checks])
+    _add_table(document, rows if cross_checks else [["Tidak ada lampiran yang dicross-check."]])
+
+<<<<<<< HEAD
     parts.append(paragraph("4. Temuan/Janggal yang Perlu Dikomentari", "Heading1"))
     parts.extend(paragraph(value, "ListBullet") for value in (payload["findings"] or ["Tidak ada temuan."]))
     parts.append(paragraph("5. Sumber Validasi Internet", "Heading1"))
@@ -115,80 +142,71 @@ def render_report(payload: dict, output_path: Path) -> dict:
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"success": True, "template": "cv_review", "output_file": str(output_path.resolve()),
             "json_file": str(json_path.resolve()), "finding_count": len(payload["findings"] or [])}
+=======
+    document.add_heading("4. Temuan/Janggal yang Perlu Dikomentari", 1)
+    for value in payload["findings"] or ["Tidak ada temuan."]:
+        document.add_paragraph(text(value), "List Bullet")
+    document.add_heading("5. Sumber Validasi Internet", 1)
+    for value in payload.get("internet_sources") or ["Tidak ada sumber yang dicatat."]:
+        document.add_paragraph(text(value), "List Bullet")
+    document.add_heading("6. Kesimpulan", 1)
+    document.add_paragraph(text(payload.get("conclusion", "Belum ada kesimpulan.")))
+    document.add_paragraph("Status akhir: " + text(payload.get("status", "perlu review manual")))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(output_path)
+    return {"success": True, "template": "cv_review", "output_file": str(output_path.resolve()),
+            "finding_count": len(payload["findings"] or [])}
+>>>>>>> 47b178571b83a89922cbff90af5c0b5f00dff3c2
 
 
 def render_personnel_docx(payload: dict, output_path: Path) -> None:
-    from docx import Document
-    from docx.enum.section import WD_ORIENT
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Inches, Pt
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-
-    doc = Document()
-    section = doc.sections[0]
+    document = Document()
+    section = document.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
     section.page_width, section.page_height = section.page_height, section.page_width
-    section.top_margin = Inches(0.35)
-    section.bottom_margin = Inches(0.35)
-    section.left_margin = Inches(0.25)
-    section.right_margin = Inches(0.25)
+    section.top_margin = section.bottom_margin = Inches(0.35)
+    section.left_margin = section.right_margin = Inches(0.25)
+    titles = [(payload.get("judul", "DAFTAR TENAGA AHLI"), 11),
+              (payload.get("wilayah", ""), 10), (payload.get("pekerjaan", ""), 10)]
+    for value, size in titles:
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run(text(value))
+        run.bold, run.font.name, run.font.size = True, "Century Gothic", Pt(size)
 
-    for text, size in [(payload.get('judul','DAFTAR TENAGA AHLI'), 11), (payload.get('wilayah',''), 10), (payload.get('pekerjaan',''), 10)]:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(text)
-        run.bold = True
-        run.font.name = 'Century Gothic'
-        run.font.size = Pt(size)
+    headers = ["No", "Nama Personel", "NIK", "Jabatan Personel", "Kualifikasi Pendidikan",
+               "Sertifikat Keahlian", "Pengalaman min dalam KAK (Tahun)",
+               "Pengalaman Kerja (Bulan)", "Pengalaman Kerja (Tahun)"]
+    table = document.add_table(rows=1, cols=len(headers))
+    table.style, table.autofit = "Table Grid", True
 
-    headers = ["No", "Nama Personel", "NIK", "Jabatan Personel", "Kualifikasi Pendidikan", "Sertifikat Keahlian", "Pengalaman min dalam KAK (Tahun)", "Pengalaman Kerja (Bulan)", "Pengalaman Kerja (Tahun)"]
-    table = doc.add_table(rows=1, cols=len(headers))
-    table.style = 'Table Grid'
-    table.autofit = True
+    def set_cell(cell, value, *, bold=False, size=7, align=WD_ALIGN_PARAGRAPH.CENTER):
+        cell.text = ""
+        paragraph = cell.paragraphs[0]
+        paragraph.alignment = align
+        run = paragraph.add_run(text(value))
+        run.bold, run.font.name, run.font.size = bold, "Century Gothic", Pt(size)
 
-    def set_cell_shading(cell, fill):
-        tcPr = cell._tc.get_or_add_tcPr()
-        shd = OxmlElement('w:shd')
-        shd.set(qn('w:fill'), fill)
-        tcPr.append(shd)
-
-    def set_cell_text(cell, text, bold=False, size=7, align=WD_ALIGN_PARAGRAPH.CENTER):
-        cell.text = ''
-        p = cell.paragraphs[0]
-        p.alignment = align
-        run = p.add_run(str(text or ''))
-        run.bold = bold
-        run.font.name = 'Century Gothic'
-        run.font.size = Pt(size)
-
-    for i,h in enumerate(headers):
-        set_cell_text(table.rows[0].cells[i], h, bold=True, size=7)
-        set_cell_shading(table.rows[0].cells[i], '8EA9D8')
-
-    for no, person in enumerate(payload['personel'], 1):
-        months = person.get('pengalaman_kerja_bulan','')
-        years = person.get('pengalaman_kerja_tahun','')
-        years_display = '' if years == '' else f"{float(years):.2f}".replace('.', ',')
-        min_kak = person.get('pengalaman_min_kak_tahun','')
-        min_kak_display = f"{min_kak} Tahun" if min_kak not in (None, '') else ''
-        row_values = [
-            no,
-            person.get('nama_personel',''),
-            person.get('nik',''),
-            person.get('jabatan_personel',''),
-            person.get('kualifikasi_pendidikan',''),
-            person.get('sertifikat_keahlian',''),
-            min_kak_display,
-            months,
-            years_display,
-        ]
-        cells = table.add_row().cells
-        for col, val in enumerate(row_values):
-            align = WD_ALIGN_PARAGRAPH.LEFT if col in (1,2,3,4,5) else WD_ALIGN_PARAGRAPH.CENTER
-            set_cell_text(cells[col], val, size=6, align=align)
-
-    doc.save(output_path)
+    for cell, header in zip(table.rows[0].cells, headers):
+        set_cell(cell, header, bold=True)
+        shading = OxmlElement("w:shd")
+        shading.set(qn("w:fill"), "8EA9D8")
+        cell._tc.get_or_add_tcPr().append(shading)
+    for number, person in enumerate(payload["personel"], 1):
+        years = person.get("pengalaman_kerja_tahun", "")
+        years_display = "" if years in (None, "") else f"{float(years):.2f}".replace(".", ",")
+        min_kak = person.get("pengalaman_min_kak_tahun", "")
+        values = [number, person.get("nama_personel", ""), person.get("nik", ""),
+                  person.get("jabatan_personel", ""), person.get("kualifikasi_pendidikan", ""),
+                  person.get("sertifikat_keahlian", ""),
+                  f"{min_kak} Tahun" if min_kak not in (None, "") else "",
+                  person.get("pengalaman_kerja_bulan", ""), years_display]
+        for column, (cell, value) in enumerate(zip(table.add_row().cells, values)):
+            align = WD_ALIGN_PARAGRAPH.LEFT if column in (1, 2, 3, 4, 5) else WD_ALIGN_PARAGRAPH.CENTER
+            set_cell(cell, value, size=6, align=align)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(output_path)
 
 
 def main() -> None:
@@ -196,10 +214,17 @@ def main() -> None:
     parser.add_argument("--payload-json", required=True, help="JSON payload atau '-' untuk stdin")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    import sys
-    payload_text = sys.stdin.read() if args.payload_json == "-" else args.payload_json
-    result = render_report(json.loads(payload_text), args.output.resolve())
+    for stream in (sys.stdin, sys.stdout):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+    try:
+        payload_text = sys.stdin.read() if args.payload_json == "-" else args.payload_json
+        result = render_report(json.loads(payload_text), args.output.resolve())
+    except Exception as exc:
+        result = {"success": False, "error": type(exc).__name__, "message": str(exc)}
     print("HERMES_CV_REPORT_RESULT=" + json.dumps(result, ensure_ascii=False))
+    if not result["success"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
