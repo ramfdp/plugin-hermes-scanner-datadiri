@@ -41,7 +41,7 @@ function harness(request, sourceTransform = value => value, mountFirst = true, o
     COMPOSER_AREAS: { actions: 'actions', middleware: 'middleware' }, window: { hermesDesktop: { getPathForFile: f => f.path } } }
   let source = sourceTransform(fs.readFileSync(path.join(__dirname, '../desktop/plugin.js'), 'utf8'))
   source = source.replace(/^import .*\r?\n/gm, '').replace('export default {', 'const plugin = {')
-  source += '\nglobalThis.api = { plugin, ScannerDataDialog, scannerPrompt, localDate, sessionScope, waitForCreatedSession }'
+  source += '\nglobalThis.api = { plugin, ScannerDataDialog, scannerPrompt, localDate, sessionScope, waitForCreatedSession, singlePdfManifest, reportTitle }'
   vm.runInNewContext(source, sdk)
   const render = () => { cursor = 0; return sdk.api.ScannerDataDialog() }
   const flatten = node => !node ? [] : Array.isArray(node) ? node.flatMap(flatten) : typeof node === 'object'
@@ -49,43 +49,59 @@ function harness(request, sourceTransform = value => value, mountFirst = true, o
   function inputs() { return flatten(render()).filter(n => n.type === 'input') }
   const set = (index, value) => inputs()[index].props.onChange({ target: { value, files: value, checked: value } })
   const file = name => ({ name, path: `C:\\Docs\\${name}`, size: 100 })
-  function configure() { set(0, 'Paket Uji'); set(1, '2026-09-23'); set(2, '2'); set(3, [file('a.pdf'), file('b.pdf')]); set(4, [file('kak.pdf')]) }
+  function configure(name = 'Paket CV gabungan.pdf') { set(0, [file(name)]) }
   if (mountFirst) render()
   const registrations = []
   sdk.api.plugin.register({ register: entry => registrations.push(entry) })
   const command = registrations.find(e => e.area === 'middleware').data.handler
   assert.equal(command({ text: '/scanner-data' }), null)
   render()
-  return { calls, notices, opens, configure, set, file, api: sdk.api, command, render, registrations,
+  return { calls, notices, opens, configure, set, file, api: sdk.api, command, render, registrations, inputs, flatten,
     changeSession: value => { session = value; focused = value }, changeStored: value => { stored = value },
     changeProfile: value => { profile = value }, changeConnection: value => { connection = value },
     changeGateway: value => { gateway = value }, host, unmount: () => cleanups.forEach(fn => fn?.()),
     start: () => flatten(render()).find(n => n.type === 'button').props.onClick() }
 }
 
-test('multiple inputs only start on explicit button and attach to bound session', async () => {
+function manifest(h) {
+  const line = h.calls.findLast(c => c.name === 'prompt.submit').args.text.split('\n\n')[1]
+  return JSON.parse(line.slice(line.indexOf('{')))
+}
+
+test('one PDF only starts on explicit button and attaches to bound session', async () => {
   const h = harness(); h.configure(); assert.equal(h.calls.length, 0)
   await h.start()
-  assert.deepEqual(h.calls.map(c => c.name), ['file.attach', 'file.attach', 'file.attach', 'prompt.submit'])
+  assert.deepEqual(h.calls.map(c => c.name), ['file.attach', 'prompt.submit'])
   for (const call of h.calls) assert.equal(call.args.session_id, 'session-1')
   const prompt = h.calls.at(-1).args.text
-  assert.match(prompt, /expected_person_count.*2/)
   assert.match(prompt, /read_document/); assert.match(prompt, /certificate_inventory/)
   assert.match(prompt, /chat_markdown/); assert.match(prompt, /XLSX dan PDF/)
   assert.match(prompt, /scanner_web_lookup/); assert.match(prompt, /save_person/)
 })
 
-test('KAK absence requires explicit acknowledgement', async () => {
-  const h = harness(); h.configure(); h.set(4, [])
-  await h.start(); assert.equal(h.calls.length, 0)
-  h.set(7, true); await h.start()
+test('KAK and every manual metadata field are absent and cannot block a single PDF', async () => {
+  const h = harness()
+  assert.equal(h.inputs().length, 1)
+  assert.equal(h.inputs()[0].props.type, 'file')
+  assert.equal(h.inputs()[0].props.multiple, false)
+  h.configure(); await h.start()
   assert.equal(h.calls.at(-1).name, 'prompt.submit')
+  const data = manifest(h)
+  assert.equal(data.documents.length, 1); assert.equal(data.documents[0].kind, 'cv')
+  assert.equal(data.project, 'Paket CV gabungan')
+  assert.equal(data.assessment_date, h.api.localDate())
+  assert.equal(data.expected_person_count, null)
+  assert.equal(data.allow_web, true)
+  assert.match(h.calls.at(-1).args.text, /requirements=\[\]/)
+  assert.match(h.calls.at(-1).args.text, /TANPA meminta KAK/)
 })
 
-test('empty files and invalid expected count are rejected', async () => {
-  const h = harness(); h.configure(); h.set(3, []); h.set(3, [{ ...h.file('bad.exe'), size: 0 }])
-  await h.start(); assert.equal(h.calls.length, 0)
-  h.configure(); h.set(2, '2.5'); await h.start(); assert.equal(h.calls.length, 0)
+test('empty non-PDF and oversized files are rejected before session creation', async () => {
+  for (const input of [[], [{ name: 'bad.exe', size: 100 }], [{ name: 'empty.pdf', size: 0 }],
+    [{ name: 'large.pdf', size: 250 * 1024 * 1024 + 1 }], [{ name: 'bad.pdf', size: NaN }]]) {
+    const h = harness(null, x => x, true, { initialSession: null })
+    h.set(0, input); await h.start(); assert.equal(h.calls.length, 0)
+  }
 })
 
 test('session changes never submit the prompt to a different chat', async () => {
@@ -112,11 +128,10 @@ test('double click does not duplicate submission; failure permits retry', async 
   await h.start(); assert.equal(h.calls.filter(c => c.name === 'prompt.submit').length, 1)
 })
 
-test('duplicate files do not reach prompt; disabling web is included in manifest', async () => {
-  const h = harness(); h.configure(); h.set(4, [h.file('a.pdf')]); await h.start()
-  assert.equal(h.calls.filter(c => c.name === 'prompt.submit').length, 0)
-  const fresh = harness(); fresh.configure(); fresh.set(8, false); await fresh.start()
-  assert.match(fresh.calls.at(-1).args.text, /"allow_web":false/)
+test('multiple or duplicate files are rejected; explicit web opt-out remains in prompt contract', async () => {
+  const h = harness(); h.set(0, [h.file('a.pdf'), h.file('a.pdf')]); await h.start()
+  assert.equal(h.calls.length, 0)
+  assert.match(h.api.scannerPrompt({ project: 'Test', allow_web: false, documents: [] }), /"allow_web":false/)
 })
 
 test('non-scanner drafts are preserved and prompt treats source text as untrusted', () => {
@@ -146,7 +161,7 @@ test('workflow prompt requires summary before web and prohibits ad-hoc code repa
   assert.ok(prompt.indexOf('4. Panggil action="summary"') < prompt.indexOf('5. Setelah summary berhasil'))
   assert.match(prompt, /workflow_complete=true/)
   assert.match(prompt, /Jangan mengedit source, membuat shim ocr_runner.py/)
-  assert.match(prompt, /"workflow_version":"0.4.2"/)
+  assert.match(prompt, /"workflow_version":"0.4.3"/)
   assert.match(prompt, /Hanya gunakan path dalam manifest/)
 })
 
@@ -170,7 +185,7 @@ test('new chat creates and activates a session before attachment, without a dumm
   assert.equal(h.opens[0].id, 'new-stored')
   assert.equal(h.calls.filter(c => c.name === 'prompt.submit').length, 1)
   for (const call of h.calls.slice(1)) assert.equal(call.args.session_id, 'new-runtime')
-  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.4.2/)
+  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.4.3/)
 })
 
 test('duplicate starts while creating a session issue just one create and one prompt', async () => {
@@ -195,7 +210,7 @@ test('create failure keeps selected files and a retry can start without selectin
   h.configure(); await h.start()
   assert.equal(h.calls.length, 1); assert.equal(h.render().props.open, true)
   await h.start()
-  assert.equal(h.calls.filter(c => c.name === 'file.attach').length, 3)
+  assert.equal(h.calls.filter(c => c.name === 'file.attach').length, 1)
   assert.equal(h.calls.at(-1).name, 'prompt.submit')
 })
 
@@ -266,4 +281,46 @@ test('hydration timeout is explicit and never fabricates an active session id', 
 test('profile change before start is rejected even when runtime id is unchanged', async () => {
   const h = harness(); h.configure(); h.changeProfile('other')
   await h.start(); assert.equal(h.calls.length, 0)
+})
+
+test('cancelling the picker preserves selection but an invalid replacement clears it', async () => {
+  const h = harness(); h.configure(); h.set(0, []); await h.start()
+  assert.equal(manifest(h).project, 'Paket CV gabungan')
+  const other = harness(); other.configure(); other.set(0, [other.file('not-a-pdf.png')])
+  await other.start(); assert.equal(other.calls.length, 0)
+})
+
+test('replacement selection and attached path are the sole document source', async () => {
+  const h = harness(async (name) => name === 'file.attach' ? { attached: true, path: 'C:\\Session\\stored.pdf' } : {})
+  h.configure('old.pdf'); h.configure('New CV.PDF'); await h.start()
+  const data = manifest(h)
+  assert.equal(data.project, 'New CV')
+  assert.equal(data.documents[0].path, 'C:\\Session\\stored.pdf')
+  assert.equal(h.calls[0].args.name, 'New CV.PDF')
+  assert.equal(data.documents.length, 1)
+})
+
+test('filename punctuation is JSON data and metadata is generated without manual input', async () => {
+  const h = harness(); h.configure('CV "contoh".PDF'); await h.start()
+  assert.equal(manifest(h).project, 'CV "contoh"')
+  assert.match(manifest(h).assessment_date, /^\d{4}-\d{2}-\d{2}$/)
+  assert.equal(h.api.reportTitle({ name: '.pdf' }), 'Ringkasan CV')
+  assert.ok(h.api.reportTitle({ name: 'x'.repeat(200) + '.pdf' }).length <= 160)
+})
+
+test('selected PDF cannot change while session is being prepared', async () => {
+  let release
+  const h = harness(async (name, args) => {
+    if (name === 'session.create') { await new Promise(resolve => { release = resolve }); return { session_id: 'new-runtime', stored_session_id: 'new-stored' } }
+    return { attached: true, path: args.path }
+  }, x => x, true, { initialSession: null })
+  h.configure('first.pdf'); const started = h.start(); h.configure('second.pdf')
+  release(); await started
+  assert.equal(manifest(h).project, 'first')
+})
+
+test('busy chat prevents attaching even when only one PDF was selected', async () => {
+  const h = harness(); h.configure(); h.host.state.busy = { get: () => true }
+  await h.start(); assert.equal(h.calls.length, 0)
+  assert.match(h.notices.at(-1).message, /CHAT_BUSY/)
 })
