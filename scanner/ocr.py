@@ -84,7 +84,24 @@ def iter_page_images(input_path):
                     yield image
 
 
+def _page_total(input_path):
+    """Count pages without rasterizing; an unreadable count stays unknown."""
+    try:
+        if input_path.suffix.lower() == '.pdf':
+            import pypdfium2 as pdfium
+            with pdfium.PdfDocument(str(input_path)) as document:
+                return len(document)
+        from PIL import Image
+        with Image.open(input_path) as image:
+            return getattr(image, 'n_frames', 1)
+    except Exception:
+        return None
+
+
 def run_mineru(input_path, output_dir, model_dir):
+    from . import progress
+    total = _page_total(input_path) if progress.active() else None
+    progress.emit(stage='ocr', pages_done=0, pages_total=total, detail='loading_model')
     client = build_mineru_client(model_dir)
     from mineru_vl_utils.post_process import json2md
     page_count = 0
@@ -92,12 +109,14 @@ def run_mineru(input_path, output_dir, model_dir):
     try:
         for index, image in enumerate(pages):
             start = perf_counter()
+            progress.emit(stage='ocr', pages_done=index, pages_total=total, detail='reading_pages')
             blocks = client.two_step_extract(image)
             prefix = output_dir / f"page_{index + 1:04d}"
             raw = {"model": MODEL_ID, "input_path": str(input_path), "page_index": index, "blocks": blocks}
             prefix.with_suffix(".json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
             prefix.with_suffix(".md").write_text(json2md(blocks), encoding="utf-8")
             page_count += 1
+            progress.emit(stage='ocr', pages_done=page_count, pages_total=total, detail='reading_pages')
             print(f"[MinerU] Page {page_count} saved ({perf_counter() - start:.1f}s)", file=sys.stderr, flush=True)
     finally:
         if hasattr(pages, "close"):

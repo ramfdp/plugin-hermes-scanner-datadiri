@@ -17,9 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from scanner import __version__
 from scanner.installation import PLUGIN_ID, MARKER, LEGACY, locations, read_desktop_marker, duplicate_desktop_copies, compare_installation
 
-COPY_NAMES = ('__init__.py', 'plugin.yaml', 'scanner', 'desktop', 'docs', 'requirements', 'requirements.txt')
+COPY_NAMES = ('__init__.py', 'plugin.yaml', 'scanner', 'desktop', 'dashboard', 'docs', 'requirements', 'requirements.txt')
 OLD_NAMES = (*LEGACY, 'download_model.py', 'finish_migration.ps1', 'local_only_report.py')
 
 
@@ -75,11 +76,17 @@ def plan_sync(runtime_root=ROOT, *, adopt_desktop=False, **options):
         no_links(entry)
         if not re.search(r"\bid\s*:\s*['\"]" + re.escape(PLUGIN_ID) + r"['\"]", entry.read_text(encoding='utf-8-sig')):
             raise ValueError('plugin.js target tidak mendeklarasikan ID Scanner; tidak menimpa plugin lain')
+    if (root / 'scanner/live_tools.py').is_file():
+        for name in ('manifest.json', 'plugin_api.py'):
+            if not (root / 'dashboard' / name).is_file():
+                raise ValueError(f'Source API progres tidak lengkap: dashboard/{name}')
     operations = []
     for name in COPY_NAMES:
         source = root / name
         no_links(source)
         if not source.exists():
+            if name == 'dashboard' and not (root / 'scanner/live_tools.py').is_file():
+                continue  # Compatibility with packages predating live progress.
             raise ValueError(f'Source tidak lengkap: {name}')
         files = [source] if source.is_file() else sorted(source.rglob('*'))
         for file in files:
@@ -176,7 +183,7 @@ def apply_sync(plan):
             raise RuntimeError(f'Sync gagal: {exc}. Backup: {backup}. Rollback errors: {rollback_errors}') from exc
     result = compare_installation(root, plan['places']['backend'], plan['places']['desktop'])
     return {'success': result['success'], 'backup': str(backup), 'installation': result,
-            'next': 'Restart Hermes/backend dan Reload desktop plugins. Pastikan popup v0.4.2. Pengaturan enable tidak diubah.'}
+            'next': f'Restart Hermes/backend agar API progres dimuat, lalu Reload desktop plugins. Pastikan popup v{__version__}. Pengaturan enable tidak diubah.'}
 
 
 def main():

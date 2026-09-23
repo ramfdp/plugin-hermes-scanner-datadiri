@@ -161,7 +161,7 @@ test('workflow prompt requires summary before web and prohibits ad-hoc code repa
   assert.ok(prompt.indexOf('4. Panggil action="summary"') < prompt.indexOf('5. Setelah summary berhasil'))
   assert.match(prompt, /workflow_complete=true/)
   assert.match(prompt, /Jangan mengedit source, membuat shim ocr_runner.py/)
-  assert.match(prompt, /"workflow_version":"0.4.3"/)
+  assert.match(prompt, /"workflow_version":"0.4.4"/)
   assert.match(prompt, /Hanya gunakan path dalam manifest/)
 })
 
@@ -185,7 +185,7 @@ test('new chat creates and activates a session before attachment, without a dumm
   assert.equal(h.opens[0].id, 'new-stored')
   assert.equal(h.calls.filter(c => c.name === 'prompt.submit').length, 1)
   for (const call of h.calls.slice(1)) assert.equal(call.args.session_id, 'new-runtime')
-  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.4.3/)
+  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.4.4/)
 })
 
 test('duplicate starts while creating a session issue just one create and one prompt', async () => {

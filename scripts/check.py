@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     files = [ROOT / '__init__.py']
-    for directory in ('scanner', 'scripts', 'tests', 'desktop'):
+    for directory in ('scanner', 'scripts', 'tests', 'desktop', 'dashboard'):
         files.extend(p for p in (ROOT / directory).rglob('*') if p.suffix in {'.py', '.js', '.cjs', '.ps1'})
     failures = []
     for path in files:
@@ -33,7 +33,7 @@ def main():
     if not shutil.which('node'):
         print('Node.js unavailable: Desktop tests NOT RUN. Install Node and rerun before merging.')
         return 2
-    return subprocess.run(['node', '--test', 'tests/desktop.test.cjs'], cwd=ROOT).returncode
+    return subprocess.run(['node', '--test', *[str(p.relative_to(ROOT)) for p in sorted((ROOT / 'tests').glob('*.test.cjs'))]], cwd=ROOT).returncode
 
 
 if __name__ == '__main__':
