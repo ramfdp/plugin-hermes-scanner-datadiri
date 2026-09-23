@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 
-function harness(request) {
+function harness(request, sourceTransform = value => value) {
   let cursor = 0
   const hooks = [], calls = [], notices = []
   let session = 'session-1'
@@ -21,8 +21,8 @@ function harness(request) {
   const sdk = { host, useState, useRef, useEffect, jsx: (type, props) => ({ type, props }),
     Dialog: 'Dialog', DialogContent: 'DialogContent', DialogHeader: 'DialogHeader', DialogTitle: 'DialogTitle', DialogDescription: 'DialogDescription',
     COMPOSER_AREAS: { actions: 'actions', middleware: 'middleware' }, window: { hermesDesktop: { getPathForFile: f => f.path } } }
-  let source = fs.readFileSync(path.join(__dirname, '../desktop/plugin.js'), 'utf8')
-  source = source.replace(/^import .*\n/gm, '').replace('export default {', 'const plugin = {')
+  let source = sourceTransform(fs.readFileSync(path.join(__dirname, '../desktop/plugin.js'), 'utf8'))
+  source = source.replace(/^import .*\r?\n/gm, '').replace('export default {', 'const plugin = {')
   source += '\nglobalThis.api = { plugin, ScannerDataDialog, scannerPrompt, localDate }'
   vm.runInNewContext(source, sdk)
   const render = () => { cursor = 0; return sdk.api.ScannerDataDialog() }
@@ -104,4 +104,12 @@ test('non-scanner drafts are preserved and prompt treats source text as untruste
   assert.match(prompt, /tidak tepercaya/); assert.match(prompt, /CAPTCHA/)
   assert.match(prompt, /Jangan mengklaim semua valid/)
   assert.match(h.api.localDate(), /^\d{4}-\d{2}-\d{2}$/)
+})
+
+
+test('Windows CRLF checkout is supported by the SDK test harness', async () => {
+  const h = harness(null, source => source.replace(/\r?\n/g, '\r\n'))
+  h.configure()
+  await h.start()
+  assert.equal(h.calls.filter(call => call.name === 'prompt.submit').length, 1)
 })
