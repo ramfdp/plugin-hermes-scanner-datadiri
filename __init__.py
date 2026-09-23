@@ -1,4 +1,5 @@
 """Hermes loader entry point. Runtime implementation lives under scanner/."""
+from inspect import iscoroutinefunction
 from .scanner import schemas, tools, live_tools
 
 
@@ -10,4 +11,6 @@ def register(ctx):
         (schemas.SCANNER_REVIEW, live_tools.scanner_review),
         (schemas.SCANNER_WEB_LOOKUP, live_tools.ordered_web_handler(ctx)),
     ):
-        ctx.register_tool(name=contract['name'], toolset='hermes_scanner', schema=contract, handler=handler)
+        # Hermes defaults is_async=False; async callbacks must be explicitly marked.
+        ctx.register_tool(name=contract['name'], toolset='hermes_scanner', schema=contract,
+                          handler=handler, is_async=iscoroutinefunction(handler))
