@@ -1,4 +1,4 @@
-# Workflow Desktop 0.4.3: satu PDF, tanpa form KAK
+# Workflow Desktop 0.4.4: satu PDF, tanpa form KAK
 
 ## Yang dilakukan pengguna
 
@@ -38,6 +38,6 @@ Data tidak diketahui memakai string kosong/null, bukan nilai tebakan. Bulan di r
 
 ## Pembaruan satu kali
 
-Setelah merge/pull, sinkronkan paket backend dan popup Desktop melalui `scripts/sync_plugin.ps1`, lalu restart backend dan Reload desktop plugins. Script 0.4.2 tetap dipakai; tidak perlu mengadopsi ulang popup yang sudah `managed` dari paket yang sama. Panduan lokasi/backup tetap di SESSION_AND_SYNC.md. Sebutan v0.4.2 pada panduan migrasi lama adalah versi historis; popup baru harus **Scanner Data Diri · v0.4.3**.
+Setelah merge/pull, sinkronkan paket backend dan popup Desktop melalui `scripts/sync_plugin.ps1`, lalu restart backend dan Reload desktop plugins. Script 0.4.2 tetap dipakai; tidak perlu mengadopsi ulang popup yang sudah `managed` dari paket yang sama. Panduan lokasi/backup tetap di SESSION_AND_SYNC.md. Sebutan v0.4.2 pada panduan migrasi lama adalah versi historis; popup baru harus **Scanner Data Diri · v0.4.4**.
 
 Revisi ini tidak menginstal dependensi, mengganti model/provider, atau mengubah OCR GPU. ReportLab tetap dibutuhkan untuk PDF. Tes memakai OCR/web/SDK tiruan; CI bukan bukti bahwa model telah mengekstrak CV asli atau semua portal bisa diakses. Guard tool bukan sandbox global Hermes.
