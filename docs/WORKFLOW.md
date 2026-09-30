@@ -1,4 +1,4 @@
-# Workflow Desktop 0.6.0: satu PDF + structured KAK matching
+# Workflow Desktop 0.7.0: full 15-point KAK review
 
 ## Yang dilakukan pengguna
 
@@ -62,3 +62,15 @@ Saat `save_person`, backend menghitung sendiri empat audit: `project_period_accu
 Jika KAK tersedia, pecah persyaratan menjadi butir atomik. Setiap butir baru memakai `audit_code` yang sesuai. #5 memakai `minimum_months`; #7 memakai `parameters.minimum_level` dan/atau `accepted_majors`; #8 memakai `schemes`, `levels`, `issuers`, dan `require_current`. Nilai parameter wajib muncul pada kutipan KAK.
 
 Saat review personel, requirement semantic #1/#2/#3/#6/#12 wajib memiliki tepat satu `semantic_assessments` per requirement. Assessment hanya membawa bukti kandidat dan Experience ID; backend memasangkan sendiri bukti KAK dari requirement. Requirement #5/#7/#8 tidak menerima penilaian model karena dihitung backend. Requirement lama tanpa `audit_code` tetap memakai `checks` legacy.
+
+
+## Final review #13-#15
+
+Setelah #1-#12 dihitung, backend menjalankan #13 cross-check CV vs dokumen pendukung, lalu #14 anomaly engine. Model tidak mengirim hasil tiga audit terakhir. #15 kemudian mengagregasi seluruh audit dan `checks` legacy.
+
+Prioritas kesimpulan:
+1. ada kriteria `tidak_memenuhi` -> **Tidak Memenuhi**;
+2. selain itu ada `perlu_klarifikasi`, anomali, bukti belum cukup, atau KAK tidak tersedia -> **Perlu Klarifikasi**;
+3. hanya seluruh kriteria yang berlaku selesai dan memenuhi -> **Memenuhi**.
+
+`report_complete` tetap menyatakan kelengkapan proses/artefak, bukan hasil pemenuhan KAK. Gunakan `final_conclusion` untuk keputusan audit dokumen.
