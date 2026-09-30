@@ -27,7 +27,7 @@ SCANNER_REVIEW = schema('scanner_review',
     {'action': {'type': 'string', 'enum': ['health', 'help', 'start', 'document', 'read_document', 'read_receipt', 'plan',
                                         'summary', 'verify_kak', 'save_person', 'status', 'export']},
      'run_id': {'type': 'string', 'description': 'ID hasil start; wajib kecuali health/help/start.'},
-     'payload': {'type': 'object', 'description': 'Lihat help. summary: people[{id,identity,source_refs}]. verify_kak: analysis,receipt_ids. '
+     'payload': {'type': 'object', 'description': 'Lihat help. plan: page_classification + roster/requirements/coverage. summary: people[{id,identity,source_refs}]. verify_kak: analysis,receipt_ids. '
                  'read_document: document_id,page,offset. document: document_id,retry opsional.'}}, ['action'])
 SCANNER_WEB_LOOKUP = schema('scanner_web_lookup',
     'Verifikasi web/browser Hermes SETELAH scanner_review summary berhasil membuat Excel. Menyimpan receipt asli. '
