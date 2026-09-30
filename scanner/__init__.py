@@ -1,2 +1,2 @@
 """Scanner Data Diri runtime. Heavy dependencies are loaded only by worker modules."""
-__version__ = "0.4.4"
+__version__ = "0.5.0"
