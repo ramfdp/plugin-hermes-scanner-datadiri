@@ -452,7 +452,7 @@ def validate_person(root, manifest, plan, payload):
         if check.get('code') in SERVER_AUDIT_CODES:
             if check.get('computed') is True:
                 continue  # Re-validation of a stored server result; recompute it below.
-            raise ValueError('Audit #1/#2/#3/#4/#5/#6/#7/#8/#9/#10/#11/#12 dikelola server dan tidak boleh ditimpa payload')
+            raise ValueError('Audit #1/#2/#3/#4/#5/#6/#7/#8/#9/#10/#11/#12 dikelola server-side dan tidak boleh ditimpa payload')
         user_audit_checks.append(check)
     facts = evaluate_history_facts(history, assessment_date)
     person['fact_analysis'] = {key: value for key, value in facts.items() if key != 'audit_checks'}
