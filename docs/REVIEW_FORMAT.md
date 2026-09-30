@@ -111,7 +111,10 @@ Semua kriteria yang berlaku harus memiliki satu check, dan semua certificate_inv
    "start_date":"2020-01","end_date":"2020-12","relevant":true,
    "project":"Proyek contoh","responsibilities":"Pengawasan pekerjaan",
    "source_refs":[{"document_id":"D001","page":1,"quote":"Perusahaan Contoh"}],
-   "supporting_refs":[]}],
+   "supporting_refs":[{"document_id":"D003","page":2,"quote":"Surat pengalaman Proyek contoh"}],
+   "supporting_facts":[{"project":"Proyek contoh","employer":"Perusahaan Contoh","role":"Engineer",
+      "start_date":"2020-01","end_date":"2020-12",
+      "source_refs":[{"document_id":"D003","page":2,"quote":"Proyek contoh Perusahaan Contoh Engineer 2020-01 sampai 2020-12"}]}]}],
  "employer_checks":[{"employer":"Perusahaan Contoh",
    "analysis":"Situs perusahaan belum dapat diperiksa; keberadaannya belum dapat diverifikasi."}],
  "certificates":[{"inventory_id":"C1","number":"CONTOH-001","holder":"Personel Contoh",
@@ -163,3 +166,7 @@ Status `perlu_klarifikasi` wajib memiliki klarifikasi. Bukti kandidat memakai
 `source_refs`; bukti KAK memakai `kak_refs` yang harus menunjuk halaman
 berklasifikasi `kak` atau `addendum`. Foundation tidak menghitung kesimpulan
 akhir 15 poin sampai evaluator masing-masing revisi diimplementasikan.
+
+### supporting_facts dan audit server-side 0.5.1
+
+`supporting_facts` hanya diisi dari dokumen CV/lampiran yang benar-benar menyebut nilai proyek, perusahaan, jabatan, tanggal mulai atau tanggal akhir. Field yang tidak tertulis dibiarkan kosong, bukan ditebak. Setiap record wajib memiliki `source_refs`. Backend menghitung #4, #9, #10 dan #11; payload yang mencoba mengirim code `project_period_accuracy`, `identity_consistency`, `project_overlap`, atau `project_duplicate` ditolak. Tanggal `YYYY` tetap dianggap presisi tahun dan tidak diubah menjadi durasi bulan; `YYYY-MM` dan `YYYY-MM-DD` dapat dibandingkan pada rentang kalender yang sesuai presisinya.

@@ -1,4 +1,4 @@
-# Scanner Data Diri 0.5
+# Scanner Data Diri 0.5.1
 
 Plugin Hermes untuk OCR lokal beberapa CV, KAK, addendum dan lampiran; pemeriksaan berbasis bukti;
 serta **satu Excel ringkasan + satu PDF laporan** pada chat. DOCX legacy tetap tersedia sebagai tool terpisah.
@@ -12,7 +12,7 @@ scanner/tools.py           Batas subprocess dan validasi hasil tool
 scanner/ocr.py             MinerU lokal, satu halaman/batch
 scanner/review.py           Alur run dan checkpoint per personel
 scanner/validation.py       Coverage, klasifikasi halaman, kutipan, identitas sertifikat
-scanner/evaluation.py       Kontrak evaluasi v2 dan 15 kode audit KAK
+scanner/evaluation.py       Evaluasi v3; audit deterministik periode/konsistensi/overlap/duplikasi
 scanner/web.py              Dispatch web/browser Hermes dan receipt nyata
 scanner/renderers/          PDF dan workbook dari snapshot yang sama
 scanner/exporter.py         Kompatibilitas Excel lama + helper workbook
@@ -115,3 +115,7 @@ Referensi integrasi: [Plugin API](https://hermes-agent.nousresearch.com/docs/dev
 [Tools](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools),
 [Desktop SDK](https://hermes-agent.nousresearch.com/docs/developer-guide/desktop-plugin-sdk).
 Jangan mengubah provider/model, budget atau konfigurasi verbosity global pengguna secara otomatis.
+
+## Audit fakta 0.5.1
+
+Empat pemeriksaan kini dihitung server-side dari riwayat terstruktur: #4 ketepatan periode, #9 konsistensi proyek/perusahaan/jabatan/periode, #10 overlap proyek, dan #11 duplikasi pengalaman. Lampiran dapat dipetakan ke `supporting_facts` dengan field proyek, perusahaan, jabatan, tanggal mulai/akhir dan `source_refs`. Konflik atau overlap menghasilkan `perlu_klarifikasi`, bukan otomatis keputusan menerima/menolak personel. Empat kode audit tersebut tidak dapat ditimpa oleh payload model.

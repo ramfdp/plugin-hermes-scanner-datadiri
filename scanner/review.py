@@ -164,6 +164,9 @@ def snapshot(root):
                 receipt_ids.add(cert['receipt_id'])
         if person['chronology']['uncertain_entries']:
             limitations.append(f"{person['id']}: sebagian periode tidak dapat dihitung penuh pada tanggal acuan.")
+        for check in person.get('audit_checks', []):
+            if check.get('applicable') and check.get('status') == 'perlu_klarifikasi':
+                limitations.append(f"{person['id']}: audit {check['code']} memerlukan klarifikasi.")
         for employer in person['employer_checks']:
             if employer['status'] == 'belum_dapat_diverifikasi':
                 limitations.append(f"{person['id']}: keberadaan setidaknya satu perusahaan belum dapat diverifikasi.")
@@ -266,6 +269,8 @@ def dispatch(args):
             storage.save(root / 'people' / f"{person['id']}.json", person)
             storage.event(root, 'save_person', person_id=person['id'])
             return {'success': True, 'person_id': person['id'], 'overall': person['overall'],
+                    'audit_checks': [{'code': check['code'], 'applicable': check.get('applicable', True),
+                                      'status': check.get('status')} for check in person.get('audit_checks', [])],
                     'certificates': [{'number': c.get('number'), 'status': c['status'], 'reason': c['reason']} for c in person['certificates']]}
         if action == 'status':
             plan = storage.load(root / 'plan.json') if (root / 'plan.json').exists() else {}

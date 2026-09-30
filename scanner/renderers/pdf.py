@@ -61,6 +61,7 @@ def render(data, path):
     for limitation in data['limitations']:
         field('Keterbatasan:', limitation)
     add('Verifikasi identitas sertifikat, tanggal berlaku pada dokumen, dan kesesuaian terhadap KAK merupakan pemeriksaan yang berbeda. Data tidak ditemukan, CAPTCHA, login atau kegagalan situs tidak membuktikan pemalsuan.')
+    audit_labels = {item['code']: item['label'] for item in data.get('evaluation', {}).get('criteria', [])}
     add('2. Ringkasan per personel', heading)
     for person in data['people']:
         add(f"{person['id']} | {person['name']} | {person['role']}", sub)
@@ -84,6 +85,19 @@ def render(data, path):
             refs(check.get('source_refs', []))
             if check.get('clarification'):
                 field('Klarifikasi:', check['clarification'])
+        add('Audit fakta pengalaman', heading)
+        if not person.get('audit_checks'):
+            add('Belum ada audit fakta terstruktur untuk personel ini.')
+        for check in person.get('audit_checks', []):
+            label = audit_labels.get(check['code'], check['code'])
+            status = check.get('status') or 'tidak berlaku'
+            add(f"{check['code']} | {status.replace('_', ' ')}", sub)
+            field('Pemeriksaan:', label)
+            field('Temuan:', check.get('finding', ''))
+            field('Analisis:', check.get('analysis', ''))
+            if check.get('clarification'):
+                field('Klarifikasi:', check['clarification'])
+            refs(check.get('source_refs', []))
         add('Kronologi dan bukti pengalaman', heading)
         chronology = person['chronology']
         add(chronology['method'])
@@ -97,6 +111,19 @@ def render(data, path):
             field('Proyek / tanggung jawab:', f"{job.get('project','-')} / {job.get('responsibilities','-')}")
             refs(job.get('source_refs', []))
             refs(job.get('supporting_refs', []))
+            for fact in job.get('supporting_facts', []):
+                values = [f"{key}={fact[key]}" for key in ('project', 'employer', 'role', 'start_date', 'end_date') if fact.get(key)]
+                field('Fakta pendukung:', ' | '.join(values) if values else 'Tidak ada nilai terstruktur')
+                refs(fact.get('source_refs', []))
+        facts = person.get('fact_analysis', {})
+        overlaps = facts.get('overlaps', {}).get('pairs', [])
+        duplicates = facts.get('duplicates', {}).get('pairs', [])
+        if overlaps or duplicates:
+            add('Overlap dan duplikasi pengalaman', heading)
+        for pair in overlaps:
+            field('Overlap:', f"{pair['left_id']} <> {pair['right_id']} | {pair['overlap_start']} s.d. {pair['overlap_end']} | {pair['calendar_days']} hari kalender | {pair['precision']}")
+        for pair in duplicates:
+            field('Duplikasi:', f"{pair['left_id']} <> {pair['right_id']} | {pair['type']} | kemiripan judul {pair.get('project_similarity', '')}")
         for employer in person['employer_checks']:
             field('Pemeriksaan perusahaan:', employer['employer'])
             field('Hasil:', employer['status'].replace('_', ' '))

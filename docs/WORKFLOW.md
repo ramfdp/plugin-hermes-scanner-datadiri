@@ -1,4 +1,4 @@
-# Workflow Desktop 0.5.0: satu PDF + klasifikasi halaman
+# Workflow Desktop 0.5.1: satu PDF + audit fakta
 
 ## Yang dilakukan pengguna
 
@@ -51,3 +51,7 @@ mengimplementasikan keputusan 15 pemeriksaan secara otomatis. `audit_checks`
 boleh masih kosong sampai evaluator per revisi ditambahkan. Renderer dan snapshot
 mencatat versi schema agar hasil tahap berikutnya dapat diaudit tanpa mengubah
 makna run lama.
+
+## Audit fakta 0.5.1
+
+Saat `save_person`, backend menghitung sendiri empat audit: `project_period_accuracy`, `identity_consistency`, `project_overlap`, dan `project_duplicate`. Untuk mendukung #4/#9, setiap `employment_history` dapat membawa `supporting_facts` dari lampiran yang benar-benar menyebut fakta tersebut. Overlap dan kandidat duplikasi dicatat untuk klarifikasi; keduanya tidak otomatis dianggap pelanggaran KAK. Payload tidak boleh mengirim empat code audit server-side ini.

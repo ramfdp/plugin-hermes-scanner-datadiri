@@ -2,7 +2,8 @@
 import copy
 import re
 from datetime import date
-from .evaluation import assign_experience_ids, validate_audit_checks
+from .evaluation import (AUDIT_CRITERIA, FACT_AUDIT_CODES, assign_experience_ids,
+                         evaluate_history_facts, partial_date, validate_audit_checks)
 from .storage import load
 from .web import normalized, official_url
 
@@ -214,33 +215,43 @@ def read_receipt(root, receipt_id):
 
 
 def chronology(history, as_of=None):
-    """Indicative union of calendar months; never silently infer a missing month/day."""
+    """Union of calendar months when month precision is actually available."""
     all_months, relevant, supported, uncertain = set(), set(), set(), []
     for number, job in enumerate(history, 1):
-        start, end = job.get("start_date", ""), job.get("end_date", "")
-        if not all(isinstance(v, str) and re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", v) for v in (start, end)):
+        start, end = partial_date(job.get("start_date")), partial_date(job.get("end_date"))
+        if not start["valid"] or not end["valid"]:
             uncertain.append(number)
             continue
-        a, b = [int(v[:4]) * 12 + int(v[5:]) - 1 for v in (start, end)]
-        if b < a:
+        if start["first"] > end["last"]:
             raise ValueError("Tanggal akhir pengalaman mendahului tanggal mulai")
+        # Year-only dates do not reveal which months were actually worked.
+        if start["precision"] == "year" or end["precision"] == "year":
+            uncertain.append(number)
+            continue
+        a = start["first"].year * 12 + start["first"].month - 1
+        b = end["last"].year * 12 + end["last"].month - 1
         if as_of is not None:
-            # Exclude future months and the unfinished assessment month; keep the
-            # original dates for human review rather than fabricating exact days.
+            # Preserve the historical policy: the unfinished assessment month
+            # and future months are not counted as experience already earned.
             cutoff = as_of.year * 12 + as_of.month - 2
             if b > cutoff:
                 uncertain.append(number)
             b = min(b, cutoff)
-        months = set(range(a, b+1))
+        if b < a:
+            continue
+        months = set(range(a, b + 1))
         all_months |= months
         if job.get("relevant") is True:
             relevant |= months
-            if job.get("supporting_refs"):
+            if job.get("supporting_refs") or job.get("supporting_facts"):
                 supported |= months
-    return {"calendar_months_unique": len(all_months), "relevant_months": len(relevant),
-            "supported_relevant_months": len(supported), "uncertain_entries": uncertain,
-            "method": "Bulan kalender inklusif, overlap dihitung sekali; indikator, bukan putusan KAK. Tanggal selain YYYY-MM tidak dihitung; bulan penilaian yang belum selesai dan bulan berikutnya dikecualikan."}
-
+    return {
+        "calendar_months_unique": len(all_months),
+        "relevant_months": len(relevant),
+        "supported_relevant_months": len(supported),
+        "uncertain_entries": list(dict.fromkeys(uncertain)),
+        "method": "Bulan kalender inklusif; overlap dihitung sekali. YYYY-MM dan YYYY-MM-DD dapat dihitung pada tingkat bulan; YYYY tetap tidak diubah menjadi bulan tebakan. Bulan penilaian yang belum selesai dan bulan berikutnya dikecualikan.",
+    }
 
 def certificate_result(root, manifest, certificate, holder, as_of):
     cert = copy.deepcopy(certificate)
@@ -329,9 +340,26 @@ def validate_person(root, manifest, plan, payload):
     history = assign_experience_ids(records(person.get('employment_history', []), 'employment_history'))
     for job in history:
         require_text(job.get('employer'), 'employer')
-        source_refs(root, manifest, job.get('source_refs', []), required=True)
-        source_refs(root, manifest, job.get('supporting_refs', []))
-    person['chronology'] = chronology(history, date.fromisoformat(manifest['assessment_date']))
+        source_refs(root, manifest, job.get('source_refs', []), required=True, kinds={'cv'},
+                    page_classification=classification)
+        source_refs(root, manifest, job.get('supporting_refs', []), kinds={'cv', 'attachment'},
+                    page_classification=classification)
+        supporting_facts = records(job.get('supporting_facts', []), 'supporting_facts')
+        for fact in supporting_facts:
+            if not any(isinstance(fact.get(field), str) and fact.get(field).strip()
+                       for field in ('project', 'employer', 'role', 'start_date', 'end_date')):
+                raise ValueError('supporting_facts harus memuat minimal satu fakta proyek/perusahaan/jabatan/periode')
+            for field in ('project', 'employer', 'role', 'start_date', 'end_date'):
+                value = fact.get(field)
+                if value is not None and not isinstance(value, str):
+                    raise ValueError(f'supporting_facts.{field} harus string atau null')
+            refs = source_refs(root, manifest, fact.get('source_refs', []), required=True,
+                               kinds={'cv', 'attachment'}, page_classification=classification)
+            own_refs(refs)
+        job['supporting_facts'] = supporting_facts
+    person['employment_history'] = history
+    assessment_date = date.fromisoformat(manifest['assessment_date'])
+    person['chronology'] = chronology(history, assessment_date)
 
     certificates = records(person.get('certificates'), 'certificates')
     inventory = {cert['id']: cert for cert in roster.get('certificate_inventory', [])}
@@ -344,9 +372,22 @@ def validate_person(root, manifest, plan, payload):
         require_text(person.get('certificate_limitation'), 'certificate_limitation')
     person['certificates'] = [certificate_result(root, manifest, cert, person['name'], date.fromisoformat(manifest['assessment_date'])) for cert in certificates]
 
-    audit_checks = validate_audit_checks(person.get('audit_checks', []))
+    submitted_audit_checks = validate_audit_checks(person.get('audit_checks', []))
+    user_audit_checks = []
+    for check in submitted_audit_checks:
+        if check.get('code') in FACT_AUDIT_CODES:
+            if check.get('computed') is True:
+                continue  # Re-validation of a stored server result; recompute it below.
+            raise ValueError('Audit #4/#9/#10/#11 dihitung server-side dan tidak boleh dikirim/ditimpa oleh payload')
+        user_audit_checks.append(check)
+    facts = evaluate_history_facts(history, assessment_date)
+    person['fact_analysis'] = {key: value for key, value in facts.items() if key != 'audit_checks'}
+    audit_checks = [*user_audit_checks, *facts['audit_checks']]
+    order = {item['code']: item['number'] for item in AUDIT_CRITERIA}
+    audit_checks.sort(key=lambda check: order[check['code']])
     for check in audit_checks:
-        source_refs(root, manifest, check.get('source_refs', []), required=check.get('applicable', True))
+        require_evidence = check.get('applicable', True) and check.get('status') in {'memenuhi', 'tidak_memenuhi'}
+        source_refs(root, manifest, check.get('source_refs', []), required=require_evidence)
         own_refs(check.get('source_refs', []))
         source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,
                     page_classification=classification)

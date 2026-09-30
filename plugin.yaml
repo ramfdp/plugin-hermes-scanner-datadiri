@@ -1,6 +1,6 @@
 name: hermes-scanner-datadiri
-version: 0.5.0
-description: Single-PDF local GPU OCR, page classification, evaluation v2 foundation, Excel and PDF review
+version: 0.5.1
+description: Single-PDF GPU OCR with deterministic period consistency overlap and duplicate audits
 provides_tools:
   - scan_document_ocr
   - export_document
