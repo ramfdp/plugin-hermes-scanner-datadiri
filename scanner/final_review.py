@@ -9,13 +9,7 @@ Document conflicts are review facts, not accusations of falsification. They beco
 perlu_klarifikasi unless a separate KAK requirement itself is not met.
 """
 import copy
-from .evaluation import AUDIT_CRITERIA, KAK_MATCH_CODES, canonical_text, date_values_compatible
-
-FINAL_AUDIT_CODES = {
-    "cv_supporting_document_match",
-    "data_anomaly",
-    "kak_conclusion",
-}
+from .evaluation import AUDIT_CRITERIA, FINAL_AUDIT_CODES, KAK_MATCH_CODES, canonical_text, date_values_compatible
 FINAL_LABELS = {
     "memenuhi": "Memenuhi",
     "tidak_memenuhi": "Tidak Memenuhi",
