@@ -100,7 +100,7 @@ class FoundationV05Test(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'tumpang tindih'):
             review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan})
 
-    def test_snapshot_exposes_v2_contract_without_fabricating_audit_results(self):
+    def test_snapshot_exposes_fact_engine_without_fabricating_unimplemented_audits(self):
         rid = self.single_pdf_run()
         review.dispatch({'action': 'plan', 'run_id': rid, 'payload': self.single_pdf_plan()})
         person = {
@@ -122,9 +122,11 @@ class FoundationV05Test(unittest.TestCase):
         review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
         snapshot = review.snapshot(storage.run_dir(rid))
         self.assertEqual(snapshot['schema_version'], 2)
-        self.assertEqual(snapshot['evaluation']['schema_version'], 2)
+        self.assertEqual(snapshot['evaluation']['schema_version'], 3)
         self.assertEqual(snapshot['evaluation']['criteria_count'], 15)
-        self.assertEqual(snapshot['people'][0]['audit_checks'], [])
+        self.assertEqual([c['code'] for c in snapshot['people'][0]['audit_checks']], ['project_period_accuracy', 'identity_consistency', 'project_overlap', 'project_duplicate'])
+        self.assertEqual(snapshot['people'][0]['audit_checks'][0]['status'], 'perlu_klarifikasi')
+        self.assertIsNone(snapshot['people'][0]['audit_checks'][2]['status'])
         self.assertEqual(snapshot['page_classification'][2]['kind'], 'kak')
 
     def test_experience_rows_receive_snapshot_local_ids(self):
@@ -141,6 +143,7 @@ class FoundationV05Test(unittest.TestCase):
     def test_evaluation_catalog_is_complete_unique_and_strict(self):
         metadata = evaluation_metadata()
         self.assertEqual(metadata['criteria_count'], 15)
+        self.assertEqual(metadata['implemented_codes'], ['identity_consistency', 'project_duplicate', 'project_overlap', 'project_period_accuracy'])
         self.assertEqual([item['number'] for item in AUDIT_CRITERIA], list(range(1, 16)))
         self.assertEqual(len({item['code'] for item in AUDIT_CRITERIA}), 15)
         self.assertEqual(AUDIT_STATUSES, {'memenuhi', 'tidak_memenuhi', 'perlu_klarifikasi'})
