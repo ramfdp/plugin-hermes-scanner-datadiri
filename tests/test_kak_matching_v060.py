@@ -147,7 +147,7 @@ class KakMatchingV060Test(unittest.TestCase):
                 'level': 'S1', 'degree': 'Sarjana Teknik', 'major': 'Teknik Sipil',
                 'institution': 'Universitas Contoh',
                 'source_refs': [self.ref(1, 'S1 Teknik Sipil')],
-                'supporting_refs': [self.ref(2, 'Ijazah S1 Teknik Sipil')],
+                'supporting_refs': [self.ref(2, 'Ijazah S1 Teknik Sipil\nSarjana Teknik\nUniversitas Contoh')],
             }],
             'employment_history': [{
                 'employer': 'PT Konsultan A', 'role': 'Site Engineer',
