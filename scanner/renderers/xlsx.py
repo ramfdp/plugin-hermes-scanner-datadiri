@@ -53,6 +53,29 @@ def render(data, path):
     detail_sheet(book, 'Audit Fakta', ['ID', 'Personel', 'Kode', 'Pemeriksaan', 'Berlaku', 'Status', 'Temuan',
                  'Analisis', 'Klarifikasi', 'Bukti'], audit_rows, [12,24,28,48,12,22,48,65,48,55])
 
+    cross_rows = []
+    for person in data['people']:
+        for detail in person.get('document_cross_check', {}).get('details', []):
+            for item in detail.get('fields', []):
+                support = item.get('support_value', '')
+                if not support and item.get('support_values'):
+                    support = ' | '.join(map(str, item['support_values']))
+                cross_rows.append([
+                    person['id'], person['name'], detail.get('type', ''), detail.get('experience_id', ''),
+                    detail.get('record', ''), item.get('field', ''), item.get('cv_value', ''),
+                    support, item.get('status', ''),
+                ])
+    detail_sheet(book, 'Cross Check Dokumen', ['ID', 'Personel', 'Jenis', 'Experience ID', 'Record',
+                 'Field', 'Nilai CV', 'Nilai Pendukung', 'Status'],
+                 cross_rows, [12,24,18,16,12,24,42,42,24])
+
+    anomaly_rows = [[p['id'], p['name'], a.get('id', ''), a.get('code', ''), a.get('material'),
+                     ', '.join(a.get('experience_ids', [])), a.get('field', ''), a.get('detail', ''),
+                     refs(a.get('source_refs', []))]
+                    for p in data['people'] for a in p.get('anomalies', [])]
+    detail_sheet(book, 'Anomali', ['ID', 'Personel', 'Anomali ID', 'Kode', 'Material', 'Experience ID',
+                 'Field', 'Detail', 'Bukti'], anomaly_rows, [12,24,16,30,12,20,22,70,55])
+
     match_rows = [[p['id'], p['name'], item.get('requirement_id', ''), item.get('code', ''),
                    item.get('status', ''), ', '.join(item.get('experience_ids', [])),
                    item.get('requirement_text', ''), item.get('finding', ''), item.get('analysis', ''),
@@ -102,12 +125,16 @@ def render(data, path):
                  'Mulai overlap', 'Akhir overlap', 'Hari kalender', 'Presisi', 'Kemiripan judul'],
                  pair_rows, [12,24,22,16,16,18,18,16,32,18])
 
-    detail_sheet(book, 'Ringkasan Review', ['ID', 'Personel', 'Ringkasan analisis', 'Status kriteria', 'Bulan klaim', 'Bulan kalender unik',
+    detail_sheet(book, 'Ringkasan Review', ['ID', 'Personel', 'Ringkasan analisis', 'Kesimpulan KAK',
+                 'Status final internal', 'Status legacy', 'Bulan klaim', 'Bulan kalender unik',
                  'Bulan relevan', 'Bulan relevan didukung', 'Periode tak dihitung', 'Metode', 'Temuan', 'Keterbatasan sertifikat'],
-                 [[p['id'], p['name'], p['summary'], p['overall'], p['identity'].get('claimed_months'), p['chronology']['calendar_months_unique'],
-                   p['chronology']['relevant_months'], p['chronology']['supported_relevant_months'], ', '.join(map(str,p['chronology']['uncertain_entries'])),
+                 [[p['id'], p['name'], p['summary'], p.get('final_conclusion', {}).get('label', 'Perlu Klarifikasi'),
+                   p.get('final_conclusion', {}).get('status', 'perlu_klarifikasi'), p['overall'],
+                   p['identity'].get('claimed_months'), p['chronology']['calendar_months_unique'],
+                   p['chronology']['relevant_months'], p['chronology']['supported_relevant_months'],
+                   ', '.join(map(str,p['chronology']['uncertain_entries'])),
                    p['chronology']['method'], '\n'.join(p['findings']), p.get('certificate_limitation','')] for p in data['people']],
-                 [12,24,60,30,14,16,16,16,20,60,50,40])
+                 [12,24,60,24,24,30,14,16,16,16,20,60,50,40])
 
     page_rows = [[row['document_id'], row['first_page'], row['last_page'], row['kind']]
                  for row in data.get('page_classification', [])]
@@ -118,7 +145,7 @@ def render(data, path):
     metadata = [['Run', data['run_id']], ['Snapshot SHA256', data['snapshot_sha256']],
                 ['Schema review', data.get('schema_version')], ['Schema evaluasi', data.get('evaluation', {}).get('schema_version')],
                 ['Kriteria audit terdaftar', data.get('evaluation', {}).get('criteria_count')],
-                ['Audit server aktif', ', '.join(data.get('evaluation', {}).get('implemented_codes', []))],
+                ['Audit #1-#15 aktif', ', '.join(data.get('evaluation', {}).get('implemented_codes', []))],
                 ['Tanggal acuan', data['assessment_date']],
                 ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')], ['Provenance KAK', data['kak']['status']],
                 ['Analisis KAK', data['kak']['analysis']], ['Batas pemeriksaan', 'Bantuan review dokumen, bukan keputusan penerimaan personel.'],

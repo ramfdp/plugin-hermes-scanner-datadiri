@@ -209,3 +209,30 @@ Backend menghitung:
 
 Tanggal `YYYY` tetap tidak diubah menjadi bulan tebakan; `YYYY-MM` dan
 `YYYY-MM-DD` dapat dibandingkan sesuai presisinya.
+
+
+### Final review 0.7.0: audit #13, #14 dan #15
+
+`audit_checks` tetap tidak boleh mengirim code #1-#15. Backend menyelesaikan tiga audit terakhir setelah audit sebelumnya selesai:
+
+- `cv_supporting_document_match` (#13): membandingkan field riwayat kerja terhadap `supporting_facts`, jenjang/jurusan pendidikan terhadap CV + ijazah, serta ringkasan sertifikat CV terhadap sertifikat terpetakan. Konflik atau dokumen yang belum lengkap menjadi `perlu_klarifikasi`.
+- `data_anomaly` (#14): mengompilasi anomaly ID stabil seperti `A001`, `A002` dari periode, konsistensi, overlap, duplikasi, cross-check dokumen dan perbedaan klaim durasi. Anomali bukan tuduhan pemalsuan.
+- `kak_conclusion` (#15): menghasilkan status internal `memenuhi`, `tidak_memenuhi`, atau `perlu_klarifikasi`, serta `final_conclusion.label` yang tampil sebagai **Memenuhi**, **Tidak Memenuhi**, atau **Perlu Klarifikasi**.
+
+Contoh output personel tersimpan:
+```json
+{
+  "final_conclusion":{
+    "status":"perlu_klarifikasi",
+    "label":"Perlu Klarifikasi",
+    "finding":"Tidak ada kriteria yang pasti Tidak Memenuhi, tetapi masih ada audit atau bukti yang memerlukan klarifikasi."
+  },
+  "document_cross_check":{"details":[],"conflicts":[],"missing":[]},
+  "anomalies":[
+    {"id":"A001","code":"experience_overlap","material":false,
+     "experience_ids":["E001","E002"],"detail":"E001 dan E002 overlap ..."}
+  ]
+}
+```
+
+Aturan agregasi final bersifat deterministik: `tidak_memenuhi` mengalahkan `perlu_klarifikasi`; `perlu_klarifikasi` mengalahkan `memenuhi`. KAK/persyaratan yang tidak tersedia selalu menghasilkan **Perlu Klarifikasi**, tidak pernah **Memenuhi**. `report_complete` dan keberhasilan membuat dua file tetap terpisah dari `final_conclusion`.

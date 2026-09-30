@@ -6,6 +6,7 @@ from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, as
                          evaluate_history_facts, partial_date, validate_audit_checks)
 from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
                            validate_requirement_extension, validate_semantic_assessments)
+from .final_review import finalize_person_review
 from .storage import load
 from .web import normalized, official_url
 
@@ -452,20 +453,11 @@ def validate_person(root, manifest, plan, payload):
         if check.get('code') in SERVER_AUDIT_CODES:
             if check.get('computed') is True:
                 continue  # Re-validation of a stored server result; recompute it below.
-            raise ValueError('Audit #1/#2/#3/#4/#5/#6/#7/#8/#9/#10/#11/#12 dikelola server-side dan tidak boleh ditimpa payload')
+            raise ValueError('Audit #1-#15 dikelola server-side dan tidak boleh ditimpa payload')
         user_audit_checks.append(check)
     facts = evaluate_history_facts(history, assessment_date)
     person['fact_analysis'] = {key: value for key, value in facts.items() if key != 'audit_checks'}
     audit_checks = [*user_audit_checks, *facts['audit_checks'], *kak_matching['audit_checks']]
-    order = {item['code']: item['number'] for item in AUDIT_CRITERIA}
-    audit_checks.sort(key=lambda check: order[check['code']])
-    for check in audit_checks:
-        require_evidence = check.get('applicable', True) and check.get('status') in {'memenuhi', 'tidak_memenuhi'}
-        source_refs(root, manifest, check.get('source_refs', []), required=require_evidence)
-        own_refs(check.get('source_refs', []))
-        source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,
-                    page_classification=classification)
-    person['audit_checks'] = audit_checks
 
     findings = person.get('findings', [])
     if not isinstance(findings, list) or any(not isinstance(x, str) for x in findings):
@@ -483,6 +475,15 @@ def validate_person(root, manifest, plan, payload):
                 raise ValueError("Kutipan perusahaan tidak ditemukan pada receipt")
             if receipt['success'] and receipt['evidence_kind'] == 'page' and normalized(employer['employer']) in normalized(receipt['content']):
                 employer['status'] = 'nama_ditemukan_pada_sumber_bukan_bukti_hubungan_kerja'
+
+    audit_checks = finalize_person_review(person, list(applicable_requirements.values()), plan['kak'], audit_checks, checks)
+    for check in audit_checks:
+        require_evidence = check.get('applicable', True) and check.get('status') in {'memenuhi', 'tidak_memenuhi'}
+        source_refs(root, manifest, check.get('source_refs', []), required=require_evidence)
+        own_refs(check.get('source_refs', []))
+        source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,
+                    page_classification=classification)
+    person['audit_checks'] = audit_checks
     structured_applicable = [check for check in person['audit_checks']
                              if check.get('code') in KAK_MATCH_CODES and check.get('applicable')]
     person['overall'] = (

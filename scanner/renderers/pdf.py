@@ -65,7 +65,8 @@ def render(data, path):
     add('2. Ringkasan per personel', heading)
     for person in data['people']:
         add(f"{person['id']} | {person['name']} | {person['role']}", sub)
-        add('Hasil kriteria: ' + person['overall'].replace('_', ' ') + '. ' + person['summary'])
+        conclusion = person.get('final_conclusion', {})
+        add(f"Kesimpulan KAK: {conclusion.get('label', 'Perlu Klarifikasi')}. {person['summary']}")
     for number, person in enumerate(data['people'], 1):
         story.append(PageBreak() if number == 1 else CondPageBreak(210))
         add(f"3.{number} Review personel", heading)
@@ -111,6 +112,38 @@ def render(data, path):
                 field('Klarifikasi:', check['clarification'])
             refs(check.get('source_refs', []))
             refs(check.get('kak_refs', []))
+        cross = person.get('document_cross_check', {})
+        if cross.get('details'):
+            add('Cross-check CV vs dokumen pendukung', heading)
+        for detail in cross.get('details', []):
+            detail_title = detail.get('type', 'dokumen')
+            if detail.get('experience_id'):
+                detail_title += f" | {detail['experience_id']}"
+            add(detail_title, sub)
+            for item in detail.get('fields', []):
+                support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
+                field('Field:', item.get('field', ''))
+                field('CV:', item.get('cv_value', ''))
+                if support:
+                    field('Pendukung:', support)
+                field('Status:', item.get('status', ''))
+
+        if person.get('anomalies'):
+            add('Anomali / kebutuhan klarifikasi', heading)
+        for anomaly in person.get('anomalies', []):
+            add(f"{anomaly['id']} | {anomaly['code']}", sub)
+            field('Material:', 'Ya' if anomaly.get('material') else 'Tidak')
+            if anomaly.get('experience_ids'):
+                field('Experience ID:', ', '.join(anomaly['experience_ids']))
+            if anomaly.get('field'):
+                field('Field:', anomaly['field'])
+            add(anomaly.get('detail', ''))
+            refs(anomaly.get('source_refs', []))
+
+        final = person.get('final_conclusion', {})
+        add('Kesimpulan pemenuhan KAK', heading)
+        field('Status:', final.get('label', 'Perlu Klarifikasi'))
+        field('Dasar:', final.get('finding', 'Kesimpulan belum tersedia.'))
         if person.get('kak_match_details'):
             add('Detail matching requirement KAK', heading)
         for item in person.get('kak_match_details', []):

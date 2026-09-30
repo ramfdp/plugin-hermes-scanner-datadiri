@@ -1,4 +1,4 @@
-# Scanner Data Diri 0.6.0
+# Scanner Data Diri 0.7.0
 
 Plugin Hermes untuk OCR lokal beberapa CV, KAK, addendum dan lampiran; pemeriksaan berbasis bukti;
 serta **satu Excel ringkasan + satu PDF laporan** pada chat. DOCX legacy tetap tersedia sebagai tool terpisah.
@@ -14,6 +14,7 @@ scanner/review.py           Alur run dan checkpoint per personel
 scanner/validation.py       Coverage, klasifikasi halaman, kutipan, identitas sertifikat
 scanner/evaluation.py       Registry audit v4 + evaluator fakta deterministik
 scanner/kak_matching.py     Matching KAK #1/#2/#3/#5/#6/#7/#8/#12
+scanner/final_review.py      Cross-check #13, anomaly engine #14, kesimpulan final #15
 scanner/web.py              Dispatch web/browser Hermes dan receipt nyata
 scanner/renderers/          PDF dan workbook dari snapshot yang sama
 scanner/exporter.py         Kompatibilitas Excel lama + helper workbook
@@ -125,3 +126,10 @@ Empat pemeriksaan kini dihitung server-side dari riwayat terstruktur: #4 ketepat
 ## Structured KAK matching 0.6.0
 
 Requirement KAK dapat diberi `audit_code` untuk delapan pemeriksaan: posisi vs pengalaman, jenis proyek, konteks organisasi, durasi pengalaman, uraian tugas, pendidikan/jurusan, sertifikasi/masa berlaku, dan kompetensi teknis. Requirement semantik (#1/#2/#3/#6/#12) dinilai Hermes per `requirement_id` melalui `semantic_assessments` dengan Experience ID dan bukti kandidat wajib. Backend mengambil bukti KAK langsung dari requirement dan mengagregasi hasil, sehingga payload tidak dapat mengganti requirement atau audit final. #5/#7/#8 dihitung backend dari kronologi, `education_records`, dan sertifikat terstruktur.
+
+
+## Final review 0.7.0
+
+Seluruh 15 audit kini aktif. #13 membandingkan klaim CV/riwayat/pendidikan/sertifikat dengan dokumen pendukung terstruktur. Konflik atau bukti yang belum lengkap menghasilkan `Perlu Klarifikasi`, bukan tuduhan pemalsuan. #14 menggabungkan anomali periode, konsistensi, overlap, duplikasi, cross-check dokumen, dan perbedaan klaim durasi. #15 menghasilkan tepat satu dari `Memenuhi`, `Tidak Memenuhi`, atau `Perlu Klarifikasi`.
+
+Aturan final: adanya `tidak_memenuhi` pada kriteria yang berlaku menghasilkan `Tidak Memenuhi`; bila tidak ada kegagalan tetapi masih ada klarifikasi/anomali, hasil `Perlu Klarifikasi`; hanya seluruh audit yang relevan selesai dan memenuhi yang menghasilkan `Memenuhi`. Tidak adanya KAK tidak pernah dianggap memenuhi.
