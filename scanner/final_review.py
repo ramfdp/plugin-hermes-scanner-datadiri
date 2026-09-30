@@ -378,7 +378,10 @@ def final_conclusion(audit_checks, legacy_checks, requirements, kak):
         status = "memenuhi"
         finding = "Seluruh kriteria KAK yang berlaku dan seluruh audit yang relevan berstatus Memenuhi."
 
-    source_refs = _unique_refs([ref for check in considered for ref in check.get("source_refs", [])])
+    source_refs = _unique_refs(
+        [ref for check in considered for ref in check.get("source_refs", [])] +
+        [ref for check in legacy_checks for ref in check.get("source_refs", [])]
+    )
     kak_refs = _unique_refs([
         ref for check in considered for ref in check.get("kak_refs", [])
     ] + [
