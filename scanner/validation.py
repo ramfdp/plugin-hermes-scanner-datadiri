@@ -2,8 +2,10 @@
 import copy
 import re
 from datetime import date
-from .evaluation import (AUDIT_CRITERIA, FACT_AUDIT_CODES, assign_experience_ids,
+from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids,
                          evaluate_history_facts, partial_date, validate_audit_checks)
+from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
+                           validate_requirement_extension, validate_semantic_assessments)
 from .storage import load
 from .web import normalized, official_url
 
@@ -152,8 +154,9 @@ def validate_plan(root, manifest, payload):
         minimum = requirement.get("minimum_months")
         if minimum is not None and (type(minimum) is not int or minimum < 0):
             raise ValueError("minimum_months harus integer >= 0 atau null")
-        source_refs(root, manifest, requirement.get("source_refs", []), required=True,
-                    kinds=REFERENCE_PAGE_KINDS, page_classification=classification)
+        req_refs = source_refs(root, manifest, requirement.get("source_refs", []), required=True,
+                               kinds=REFERENCE_PAGE_KINDS, page_classification=classification)
+        validate_requirement_extension(requirement, " ".join(ref["quote"] for ref in req_refs))
 
     kak = plan.get("kak")
     if not isinstance(kak, dict):
@@ -323,10 +326,13 @@ def validate_person(root, manifest, plan, payload):
     claimed = identity.get('claimed_months')
     if claimed is not None and (type(claimed) is not int or claimed < 0):
         raise ValueError("claimed_months harus integer >= 0 atau null")
-    required = {r['id']: r for r in plan['requirements'] if r['role'] == '*' or normalized(r['role']) == normalized(roster['role'])}
+    applicable_requirements = {r['id']: r for r in plan['requirements']
+                               if r['role'] == '*' or normalized(r['role']) == normalized(roster['role'])}
+    legacy_required = {rid: requirement for rid, requirement in applicable_requirements.items()
+                       if not requirement.get('audit_code')}
     checks = records(person.get('checks'), 'checks')
-    if set(unique(checks, 'requirement_id', 'checks')) != set(required):
-        raise ValueError("checks harus mencakup tepat semua persyaratan untuk role personel; jangan lewati kriteria")
+    if set(unique(checks, 'requirement_id', 'checks')) != set(legacy_required):
+        raise ValueError("checks legacy harus mencakup tepat requirement tanpa audit_code untuk role personel")
     for check in checks:
         if check.get('status') not in CHECK_STATUSES:
             raise ValueError("Status check harus memenuhi/tidak_memenuhi/belum_dapat_dinilai")
@@ -335,11 +341,18 @@ def validate_person(root, manifest, plan, payload):
         source_refs(root, manifest, check.get('source_refs', []), required=check['status'] != 'belum_dapat_dinilai')
         if check['status'] == 'belum_dapat_dinilai':
             require_text(check.get('clarification'), 'clarification')
-        check['requirement'] = required[check['requirement_id']]['text']
+        check['requirement'] = legacy_required[check['requirement_id']]['text']
 
     history = assign_experience_ids(records(person.get('employment_history', []), 'employment_history'))
+    organization_fields = ('client', 'consultant', 'contractor', 'represented_organization')
     for job in history:
         require_text(job.get('employer'), 'employer')
+        for field in organization_fields:
+            value = job.get(field, '')
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f'employment_history.{field} harus string atau null')
+            if value is None:
+                job[field] = ''
         source_refs(root, manifest, job.get('source_refs', []), required=True, kinds={'cv'},
                     page_classification=classification)
         source_refs(root, manifest, job.get('supporting_refs', []), kinds={'cv', 'attachment'},
@@ -347,17 +360,73 @@ def validate_person(root, manifest, plan, payload):
         supporting_facts = records(job.get('supporting_facts', []), 'supporting_facts')
         for fact in supporting_facts:
             if not any(isinstance(fact.get(field), str) and fact.get(field).strip()
-                       for field in ('project', 'employer', 'role', 'start_date', 'end_date')):
-                raise ValueError('supporting_facts harus memuat minimal satu fakta proyek/perusahaan/jabatan/periode')
-            for field in ('project', 'employer', 'role', 'start_date', 'end_date'):
+                       for field in ('project', 'employer', 'role', 'start_date', 'end_date',
+                                     *organization_fields)):
+                raise ValueError('supporting_facts harus memuat minimal satu fakta proyek/organisasi/jabatan/periode')
+            for field in ('project', 'employer', 'role', 'start_date', 'end_date', *organization_fields):
                 value = fact.get(field)
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f'supporting_facts.{field} harus string atau null')
             refs = source_refs(root, manifest, fact.get('source_refs', []), required=True,
                                kinds={'cv', 'attachment'}, page_classification=classification)
             own_refs(refs)
+            strict_evidence = fact.get('strict_evidence', False)
+            if not isinstance(strict_evidence, bool):
+                raise ValueError('supporting_facts.strict_evidence harus boolean')
+            fact['strict_evidence'] = strict_evidence
+            if strict_evidence:
+                evidence_text = normalized(" ".join(ref['quote'] for ref in refs))
+                for field in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',
+                              'represented_organization', 'start_date', 'end_date'):
+                    value = fact.get(field)
+                    if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                        raise ValueError(f'supporting_facts.{field} tidak didukung kutipan dokumen')
         job['supporting_facts'] = supporting_facts
     person['employment_history'] = history
+
+    education_records = records(person.get('education_records', []), 'education_records')
+    for record in education_records:
+        for field in ('level', 'major', 'institution', 'degree'):
+            value = record.get(field, '')
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f'education_records.{field} harus string atau null')
+            if value is None:
+                record[field] = ''
+        refs = source_refs(root, manifest, record.get('source_refs', []), required=True,
+                           kinds={'cv', 'attachment'}, page_classification=classification)
+        own_refs(refs)
+        support = source_refs(root, manifest, record.get('supporting_refs', []),
+                              kinds={'cv', 'attachment'}, page_classification=classification)
+        own_refs(support)
+        evidence_text = normalized(" ".join(ref['quote'] for ref in [*refs, *support]))
+        for field in ('level', 'major', 'institution', 'degree'):
+            value = record.get(field)
+            if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                raise ValueError(f'education_records.{field} tidak didukung kutipan dokumen')
+    person['education_records'] = education_records
+
+    semantic_assessments = validate_semantic_assessments(
+        person.get('semantic_assessments', []), plan['requirements'], person['role'],
+        [job['id'] for job in history])
+    for assessment in semantic_assessments:
+        refs = source_refs(root, manifest, assessment.get('source_refs', []), required=True,
+                           kinds={'cv', 'attachment'}, page_classification=classification)
+        own_refs(refs)
+        source_refs(root, manifest, assessment.get('kak_refs', []), required=True,
+                    kinds=REFERENCE_PAGE_KINDS, page_classification=classification)
+    person['semantic_assessments'] = semantic_assessments
+
+    position_requirements = [req for req in plan['requirements']
+                             if req.get('audit_code') == 'position_experience_match'
+                             and applicable(req, person['role'])]
+    if position_requirements:
+        relevant_ids = {exp_id for assessment in semantic_assessments
+                        if assessment['code'] == 'position_experience_match'
+                        and assessment['status'] == 'memenuhi'
+                        for exp_id in assessment.get('experience_ids', [])}
+        for job in history:
+            job['relevant'] = job['id'] in relevant_ids
+
     assessment_date = date.fromisoformat(manifest['assessment_date'])
     person['chronology'] = chronology(history, assessment_date)
 
@@ -370,19 +439,24 @@ def validate_person(root, manifest, plan, payload):
             raise ValueError('Bukti sertifikat harus sama dengan inventory plan')
     if not certificates:
         require_text(person.get('certificate_limitation'), 'certificate_limitation')
-    person['certificates'] = [certificate_result(root, manifest, cert, person['name'], date.fromisoformat(manifest['assessment_date'])) for cert in certificates]
+    person['certificates'] = [certificate_result(root, manifest, cert, person['name'], assessment_date) for cert in certificates]
+
+    kak_matching = compute_kak_matching(
+        plan['requirements'], person['role'], history, person['chronology'],
+        education_records, person['certificates'], semantic_assessments)
+    person['kak_match_details'] = kak_matching['details']
 
     submitted_audit_checks = validate_audit_checks(person.get('audit_checks', []))
     user_audit_checks = []
     for check in submitted_audit_checks:
-        if check.get('code') in FACT_AUDIT_CODES:
+        if check.get('code') in SERVER_AUDIT_CODES:
             if check.get('computed') is True:
                 continue  # Re-validation of a stored server result; recompute it below.
-            raise ValueError('Audit #4/#9/#10/#11 dihitung server-side dan tidak boleh dikirim/ditimpa oleh payload')
+            raise ValueError('Audit #1/#2/#3/#4/#5/#6/#7/#8/#9/#10/#11/#12 dikelola server-side dan tidak boleh ditimpa payload')
         user_audit_checks.append(check)
     facts = evaluate_history_facts(history, assessment_date)
     person['fact_analysis'] = {key: value for key, value in facts.items() if key != 'audit_checks'}
-    audit_checks = [*user_audit_checks, *facts['audit_checks']]
+    audit_checks = [*user_audit_checks, *facts['audit_checks'], *kak_matching['audit_checks']]
     order = {item['code']: item['number'] for item in AUDIT_CRITERIA}
     audit_checks.sort(key=lambda check: order[check['code']])
     for check in audit_checks:
@@ -409,10 +483,16 @@ def validate_person(root, manifest, plan, payload):
                 raise ValueError("Kutipan perusahaan tidak ditemukan pada receipt")
             if receipt['success'] and receipt['evidence_kind'] == 'page' and normalized(employer['employer']) in normalized(receipt['content']):
                 employer['status'] = 'nama_ditemukan_pada_sumber_bukan_bukti_hubungan_kerja'
-    person['overall'] = ('tidak_ada_kriteria_KAK' if not checks else
-                         'ada_kriteria_tidak_memenuhi' if any(check['status'] == 'tidak_memenuhi' for check in checks) else
-                         'perlu_klarifikasi' if any(check['status'] == 'belum_dapat_dinilai' for check in checks) else
-                         'kriteria_diperiksa_memenuhi')
+    structured_applicable = [check for check in person['audit_checks']
+                             if check.get('code') in KAK_MATCH_CODES and check.get('applicable')]
+    person['overall'] = (
+        'ada_kriteria_tidak_memenuhi' if any(check.get('status') == 'tidak_memenuhi' for check in structured_applicable) else
+        'perlu_klarifikasi' if any(check.get('status') == 'perlu_klarifikasi' for check in structured_applicable) else
+        'kriteria_diperiksa_memenuhi' if structured_applicable else
+        'tidak_ada_kriteria_KAK' if not checks else
+        'ada_kriteria_tidak_memenuhi' if any(check['status'] == 'tidak_memenuhi' for check in checks) else
+        'perlu_klarifikasi' if any(check['status'] == 'belum_dapat_dinilai' for check in checks) else
+        'kriteria_diperiksa_memenuhi')
     person['review_note'] = 'Hasil bantu pemeriksaan dokumen; bukan keputusan menerima/menolak personel.'
     return person
 

@@ -72,11 +72,23 @@ def render(data, path):
         add(person['name'], title)
         field('ID / posisi:', f"{person['id']} / {person['role']}")
         field('Pendidikan:', person['identity'].get('education', 'Belum tersedia'))
+        for education in person.get('education_records', []):
+            field('Pendidikan terstruktur:',
+                  f"{education.get('level','-')} | {education.get('degree','-')} | {education.get('major','-')} | {education.get('institution','-')}")
+            refs(education.get('source_refs', []))
+            refs(education.get('supporting_refs', []))
         field('Pengalaman yang diklaim (bulan):', person['identity'].get('claimed_months'))
         add(person['summary'])
         add('Pemeriksaan persyaratan KAK', heading)
-        if not person['checks']:
+        structured_kak = any(check.get('applicable') and check.get('code') in {
+            'position_experience_match', 'project_kak_match', 'organization_role_match',
+            'experience_duration_match', 'responsibility_position_match', 'education_major_match',
+            'certificate_kak_validity', 'technical_competency_match'
+        } for check in person.get('audit_checks', []))
+        if not person['checks'] and not structured_kak:
             add('Tidak ada kriteria KAK untuk posisi ini yang dapat digunakan. Kesesuaian belum dapat dinilai.')
+        elif not person['checks'] and structured_kak:
+            add('Requirement KAK terstruktur dinilai pada bagian audit dan detail matching di bawah.')
         for check in person['checks']:
             add(f"{check['requirement_id']} | {check['status'].replace('_',' ')}", sub)
             field('Persyaratan:', check['requirement'])
@@ -85,9 +97,9 @@ def render(data, path):
             refs(check.get('source_refs', []))
             if check.get('clarification'):
                 field('Klarifikasi:', check['clarification'])
-        add('Audit fakta pengalaman', heading)
+        add('Audit KAK dan fakta', heading)
         if not person.get('audit_checks'):
-            add('Belum ada audit fakta terstruktur untuk personel ini.')
+            add('Belum ada audit terstruktur untuk personel ini.')
         for check in person.get('audit_checks', []):
             label = audit_labels.get(check['code'], check['code'])
             status = check.get('status') or 'tidak berlaku'
@@ -98,6 +110,20 @@ def render(data, path):
             if check.get('clarification'):
                 field('Klarifikasi:', check['clarification'])
             refs(check.get('source_refs', []))
+            refs(check.get('kak_refs', []))
+        if person.get('kak_match_details'):
+            add('Detail matching requirement KAK', heading)
+        for item in person.get('kak_match_details', []):
+            add(f"{item['requirement_id']} | {item['code']} | {item['status'].replace('_', ' ')}", sub)
+            field('Persyaratan:', item.get('requirement_text', ''))
+            if item.get('experience_ids'):
+                field('Experience ID:', ', '.join(item['experience_ids']))
+            field('Temuan:', item.get('finding', ''))
+            field('Analisis:', item.get('analysis', ''))
+            if item.get('clarification'):
+                field('Klarifikasi:', item['clarification'])
+            refs(item.get('source_refs', []))
+            refs(item.get('kak_refs', []))
         add('Kronologi dan bukti pengalaman', heading)
         chronology = person['chronology']
         add(chronology['method'])
@@ -109,10 +135,17 @@ def render(data, path):
             add(f"{job.get('id', 'Experience')} | {job['employer']} | {job.get('role', '')}", sub)
             field('Periode asli:', f"{job.get('start_date','?')} sampai {job.get('end_date','?')}")
             field('Proyek / tanggung jawab:', f"{job.get('project','-')} / {job.get('responsibilities','-')}")
+            organizations = [f"{label}: {job.get(key)}" for key, label in (
+                ('client', 'Pemberi kerja'), ('consultant', 'Konsultan'), ('contractor', 'Kontraktor'),
+                ('represented_organization', 'Instansi diwakili')) if job.get(key)]
+            if organizations:
+                field('Konteks organisasi:', ' | '.join(organizations))
             refs(job.get('source_refs', []))
             refs(job.get('supporting_refs', []))
             for fact in job.get('supporting_facts', []):
-                values = [f"{key}={fact[key]}" for key in ('project', 'employer', 'role', 'start_date', 'end_date') if fact.get(key)]
+                values = [f"{key}={fact[key]}" for key in (
+                    'project', 'employer', 'role', 'client', 'consultant', 'contractor',
+                    'represented_organization', 'start_date', 'end_date') if fact.get(key)]
                 field('Fakta pendukung:', ' | '.join(values) if values else 'Tidak ada nilai terstruktur')
                 refs(fact.get('source_refs', []))
         facts = person.get('fact_analysis', {})

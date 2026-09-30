@@ -1,4 +1,4 @@
-# Workflow Desktop 0.5.1: satu PDF + audit fakta
+# Workflow Desktop 0.6.0: satu PDF + structured KAK matching
 
 ## Yang dilakukan pengguna
 
@@ -55,3 +55,10 @@ makna run lama.
 ## Audit fakta 0.5.1
 
 Saat `save_person`, backend menghitung sendiri empat audit: `project_period_accuracy`, `identity_consistency`, `project_overlap`, dan `project_duplicate`. Untuk mendukung #4/#9, setiap `employment_history` dapat membawa `supporting_facts` dari lampiran yang benar-benar menyebut fakta tersebut. Overlap dan kandidat duplikasi dicatat untuk klarifikasi; keduanya tidak otomatis dianggap pelanggaran KAK. Payload tidak boleh mengirim empat code audit server-side ini.
+
+
+## Structured KAK matching 0.6.0
+
+Jika KAK tersedia, pecah persyaratan menjadi butir atomik. Setiap butir baru memakai `audit_code` yang sesuai. #5 memakai `minimum_months`; #7 memakai `parameters.minimum_level` dan/atau `accepted_majors`; #8 memakai `schemes`, `levels`, `issuers`, dan `require_current`. Nilai parameter wajib muncul pada kutipan KAK.
+
+Saat review personel, requirement semantic #1/#2/#3/#6/#12 wajib memiliki tepat satu `semantic_assessments` per requirement. Assessment hanya membawa bukti kandidat dan Experience ID; backend memasangkan sendiri bukti KAK dari requirement. Requirement #5/#7/#8 tidak menerima penilaian model karena dihitung backend. Requirement lama tanpa `audit_code` tetap memakai `checks` legacy.

@@ -1,4 +1,4 @@
-# Scanner Data Diri 0.5.1
+# Scanner Data Diri 0.6.0
 
 Plugin Hermes untuk OCR lokal beberapa CV, KAK, addendum dan lampiran; pemeriksaan berbasis bukti;
 serta **satu Excel ringkasan + satu PDF laporan** pada chat. DOCX legacy tetap tersedia sebagai tool terpisah.
@@ -12,7 +12,8 @@ scanner/tools.py           Batas subprocess dan validasi hasil tool
 scanner/ocr.py             MinerU lokal, satu halaman/batch
 scanner/review.py           Alur run dan checkpoint per personel
 scanner/validation.py       Coverage, klasifikasi halaman, kutipan, identitas sertifikat
-scanner/evaluation.py       Evaluasi v3; audit deterministik periode/konsistensi/overlap/duplikasi
+scanner/evaluation.py       Registry audit v4 + evaluator fakta deterministik
+scanner/kak_matching.py     Matching KAK #1/#2/#3/#5/#6/#7/#8/#12
 scanner/web.py              Dispatch web/browser Hermes dan receipt nyata
 scanner/renderers/          PDF dan workbook dari snapshot yang sama
 scanner/exporter.py         Kompatibilitas Excel lama + helper workbook
@@ -119,3 +120,8 @@ Jangan mengubah provider/model, budget atau konfigurasi verbosity global penggun
 ## Audit fakta 0.5.1
 
 Empat pemeriksaan kini dihitung server-side dari riwayat terstruktur: #4 ketepatan periode, #9 konsistensi proyek/perusahaan/jabatan/periode, #10 overlap proyek, dan #11 duplikasi pengalaman. Lampiran dapat dipetakan ke `supporting_facts` dengan field proyek, perusahaan, jabatan, tanggal mulai/akhir dan `source_refs`. Konflik atau overlap menghasilkan `perlu_klarifikasi`, bukan otomatis keputusan menerima/menolak personel. Empat kode audit tersebut tidak dapat ditimpa oleh payload model.
+
+
+## Structured KAK matching 0.6.0
+
+Requirement KAK dapat diberi `audit_code` untuk delapan pemeriksaan: posisi vs pengalaman, jenis proyek, konteks organisasi, durasi pengalaman, uraian tugas, pendidikan/jurusan, sertifikasi/masa berlaku, dan kompetensi teknis. Requirement semantik (#1/#2/#3/#6/#12) dinilai Hermes per `requirement_id` melalui `semantic_assessments` dengan Experience ID dan bukti kandidat wajib. Backend mengambil bukti KAK langsung dari requirement dan mengagregasi hasil, sehingga payload tidak dapat mengganti requirement atau audit final. #5/#7/#8 dihitung backend dari kronologi, `education_records`, dan sertifikat terstruktur.

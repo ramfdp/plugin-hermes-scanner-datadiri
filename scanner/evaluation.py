@@ -12,7 +12,7 @@ from calendar import monthrange
 from datetime import date
 from difflib import SequenceMatcher
 
-EVALUATION_SCHEMA_VERSION = 3
+EVALUATION_SCHEMA_VERSION = 4
 AUDIT_STATUSES = {"memenuhi", "tidak_memenuhi", "perlu_klarifikasi"}
 
 AUDIT_CRITERIA = (
@@ -39,6 +39,20 @@ FACT_AUDIT_CODES = {
     "project_overlap",
     "project_duplicate",
 }
+SEMANTIC_MATCH_CODES = {
+    "position_experience_match",
+    "project_kak_match",
+    "organization_role_match",
+    "responsibility_position_match",
+    "technical_competency_match",
+}
+DETERMINISTIC_MATCH_CODES = {
+    "experience_duration_match",
+    "education_major_match",
+    "certificate_kak_validity",
+}
+KAK_MATCH_CODES = SEMANTIC_MATCH_CODES | DETERMINISTIC_MATCH_CODES
+SERVER_AUDIT_CODES = FACT_AUDIT_CODES | KAK_MATCH_CODES
 FACT_FIELDS = ("project", "employer", "role", "start_date", "end_date")
 
 
@@ -51,8 +65,10 @@ def evaluation_metadata():
         "schema_version": EVALUATION_SCHEMA_VERSION,
         "criteria_count": len(AUDIT_CRITERIA),
         "criteria": criterion_catalog(),
-        "implemented_codes": sorted(FACT_AUDIT_CODES),
-        "note": "Pemeriksaan fakta #4/#9/#10/#11 dihitung server-side; kriteria lain diimplementasikan bertahap.",
+        "implemented_codes": sorted(SERVER_AUDIT_CODES),
+        "semantic_codes": sorted(SEMANTIC_MATCH_CODES),
+        "deterministic_codes": sorted(FACT_AUDIT_CODES | DETERMINISTIC_MATCH_CODES),
+        "note": "Audit #1/#2/#3/#6/#12 memakai semantic assessment berbasis evidence; #4/#5/#7/#8/#9/#10/#11 dihitung/diagregasi server-side.",
     }
 
 

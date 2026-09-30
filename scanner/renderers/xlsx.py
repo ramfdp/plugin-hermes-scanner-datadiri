@@ -12,6 +12,8 @@ def supporting_facts(values):
     for fact in values or []:
         fields = []
         for key, label in (('project', 'proyek'), ('employer', 'perusahaan'), ('role', 'jabatan'),
+                           ('client', 'pemberi kerja'), ('consultant', 'konsultan'),
+                           ('contractor', 'kontraktor'), ('represented_organization', 'instansi'),
                            ('start_date', 'mulai'), ('end_date', 'selesai')):
             if fact.get(key):
                 fields.append(f"{label}={fact[key]}")
@@ -51,6 +53,23 @@ def render(data, path):
     detail_sheet(book, 'Audit Fakta', ['ID', 'Personel', 'Kode', 'Pemeriksaan', 'Berlaku', 'Status', 'Temuan',
                  'Analisis', 'Klarifikasi', 'Bukti'], audit_rows, [12,24,28,48,12,22,48,65,48,55])
 
+    match_rows = [[p['id'], p['name'], item.get('requirement_id', ''), item.get('code', ''),
+                   item.get('status', ''), ', '.join(item.get('experience_ids', [])),
+                   item.get('requirement_text', ''), item.get('finding', ''), item.get('analysis', ''),
+                   item.get('clarification', ''), refs(item.get('source_refs', [])), refs(item.get('kak_refs', [])),
+                   'backend' if item.get('computed') else 'semantic']
+                  for p in data['people'] for item in p.get('kak_match_details', [])]
+    detail_sheet(book, 'Detail Matching KAK', ['ID', 'Personel', 'Requirement', 'Kode Audit', 'Status',
+                 'Experience ID', 'Persyaratan KAK', 'Temuan', 'Analisis', 'Klarifikasi',
+                 'Bukti Kandidat', 'Bukti KAK', 'Sumber Penilaian'],
+                 match_rows, [12,24,18,30,22,22,48,48,65,48,55,55,18])
+
+    education_rows = [[p['id'], p['name'], e.get('level', ''), e.get('degree', ''), e.get('major', ''),
+                       e.get('institution', ''), refs(e.get('source_refs', [])), refs(e.get('supporting_refs', []))]
+                      for p in data['people'] for e in p.get('education_records', [])]
+    detail_sheet(book, 'Pendidikan', ['ID', 'Personel', 'Jenjang', 'Gelar', 'Jurusan', 'Institusi',
+                 'Bukti', 'Bukti Pendukung'], education_rows, [12,24,16,24,32,36,55,55])
+
     certificates = [[p['id'], p['name'], c.get('number', ''), c.get('holder', ''), c.get('issuer', ''), c.get('scheme', ''),
                      c.get('level', ''), c.get('issued_on', ''), c.get('expires_on', ''), c['status'], c['validity'],
                      c['analysis'], c['reason'], c.get('receipt_id', ''), c.get('checked_at', ''), refs(c['source_refs'])]
@@ -58,13 +77,16 @@ def render(data, path):
     detail_sheet(book, 'Verifikasi Sertifikat', ['ID', 'Personel', 'Nomor', 'Pemegang', 'Penerbit', 'Skema', 'Jenjang', 'Terbit', 'Berlaku sampai',
                  'Verifikasi identitas', 'Tanggal dokumen', 'Analisis', 'Batas verifikasi', 'Receipt', 'Diperiksa', 'Bukti'], certificates)
 
-    history = [[p['id'], p['name'], h.get('id', ''), h['employer'], h.get('role', ''), h.get('start_date', ''), h.get('end_date', ''),
-                h.get('relevant'), h.get('project', ''), h.get('responsibilities', ''), refs(h.get('source_refs', [])),
+    history = [[p['id'], p['name'], h.get('id', ''), h['employer'], h.get('role', ''),
+                h.get('client', ''), h.get('consultant', ''), h.get('contractor', ''), h.get('represented_organization', ''),
+                h.get('start_date', ''), h.get('end_date', ''), h.get('relevant'), h.get('project', ''),
+                h.get('responsibilities', ''), refs(h.get('source_refs', [])),
                 refs(h.get('supporting_refs', [])), supporting_facts(h.get('supporting_facts', []))]
                for p in data['people'] for h in p['employment_history']]
-    detail_sheet(book, 'Riwayat Pekerjaan', ['ID', 'Personel', 'Experience ID', 'Perusahaan', 'Jabatan', 'Mulai asli', 'Selesai asli',
-                 'Relevan', 'Proyek', 'Tanggung jawab', 'CV', 'Lampiran', 'Fakta Pendukung'],
-                 history, [12,24,16,28,24,16,16,12,36,50,50,50,70])
+    detail_sheet(book, 'Riwayat Pekerjaan', ['ID', 'Personel', 'Experience ID', 'Perusahaan', 'Jabatan',
+                 'Pemberi Kerja', 'Konsultan', 'Kontraktor', 'Instansi Diwakili',
+                 'Mulai asli', 'Selesai asli', 'Relevan', 'Proyek', 'Tanggung jawab', 'CV', 'Lampiran', 'Fakta Pendukung'],
+                 history, [12,24,16,28,24,28,28,28,30,16,16,12,36,50,50,50,70])
 
     pair_rows = []
     for person in data['people']:
@@ -96,7 +118,7 @@ def render(data, path):
     metadata = [['Run', data['run_id']], ['Snapshot SHA256', data['snapshot_sha256']],
                 ['Schema review', data.get('schema_version')], ['Schema evaluasi', data.get('evaluation', {}).get('schema_version')],
                 ['Kriteria audit terdaftar', data.get('evaluation', {}).get('criteria_count')],
-                ['Audit fakta aktif', ', '.join(data.get('evaluation', {}).get('implemented_codes', []))],
+                ['Audit server aktif', ', '.join(data.get('evaluation', {}).get('implemented_codes', []))],
                 ['Tanggal acuan', data['assessment_date']],
                 ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')], ['Provenance KAK', data['kak']['status']],
                 ['Analisis KAK', data['kak']['analysis']], ['Batas pemeriksaan', 'Bantuan review dokumen, bukan keputusan penerimaan personel.'],

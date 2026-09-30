@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 from . import storage
-from .evaluation import evaluation_metadata
+from .evaluation import KAK_MATCH_CODES, evaluation_metadata
 from .validation import validate_plan, validate_person, read_receipt
 
 KINDS = {"cv", "kak", "addendum", "attachment"}
@@ -151,7 +151,9 @@ def snapshot(root):
         limitations.append('Pemeriksaan daring tidak diizinkan; sertifikat/perusahaan belum diverifikasi secara daring.')
     receipt_ids = set(plan['kak'].get('receipt_ids', []))
     for person in people:
-        if not person['checks']:
+        structured_kak = any(check.get('code') in KAK_MATCH_CODES and check.get('applicable')
+                             for check in person.get('audit_checks', []))
+        if not person['checks'] and not structured_kak:
             limitations.append(f"{person['id']}: tidak ada kriteria KAK yang cocok dengan role.")
         if any(c['status'] == 'belum_dapat_dinilai' for c in person['checks']):
             limitations.append(f"{person['id']}: sebagian kriteria memerlukan klarifikasi.")
@@ -271,6 +273,7 @@ def dispatch(args):
             return {'success': True, 'person_id': person['id'], 'overall': person['overall'],
                     'audit_checks': [{'code': check['code'], 'applicable': check.get('applicable', True),
                                       'status': check.get('status')} for check in person.get('audit_checks', [])],
+                    'kak_match_detail_count': len(person.get('kak_match_details', [])),
                     'certificates': [{'number': c.get('number'), 'status': c['status'], 'reason': c['reason']} for c in person['certificates']]}
         if action == 'status':
             plan = storage.load(root / 'plan.json') if (root / 'plan.json').exists() else {}
