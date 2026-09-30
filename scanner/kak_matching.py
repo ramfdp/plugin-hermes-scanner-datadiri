@@ -60,6 +60,8 @@ def validate_requirement_extension(requirement, evidence_text):
         if not (isinstance(level, str) and level.strip()) and not majors:
             raise ValueError("education_major_match memerlukan minimum_level dan/atau accepted_majors")
         params["minimum_level"] = level.strip() if isinstance(level, str) else ""
+        if params["minimum_level"] and canonical_text(params["minimum_level"]).replace(" ", "") not in LEVEL_RANK:
+            raise ValueError("parameters.minimum_level tidak dikenal; gunakan SMA/SMK/D1/D2/D3/D4/S1/Profesi/S2/S3")
         params["accepted_majors"] = majors
     elif code == "certificate_kak_validity":
         allowed = {"schemes", "levels", "issuers", "require_current"}
