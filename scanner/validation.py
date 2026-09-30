@@ -2,7 +2,7 @@
 import copy
 import re
 from datetime import date
-from .evaluation import (AUDIT_CRITERIA, SERVER_AUDIT_CODES, assign_experience_ids,
+from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids,
                          evaluate_history_facts, partial_date, validate_audit_checks)
 from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
                            validate_requirement_extension, validate_semantic_assessments)
@@ -370,12 +370,17 @@ def validate_person(root, manifest, plan, payload):
             refs = source_refs(root, manifest, fact.get('source_refs', []), required=True,
                                kinds={'cv', 'attachment'}, page_classification=classification)
             own_refs(refs)
-            evidence_text = normalized(" ".join(ref['quote'] for ref in refs))
-            for field in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',
-                          'represented_organization', 'start_date', 'end_date'):
-                value = fact.get(field)
-                if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
-                    raise ValueError(f'supporting_facts.{field} tidak didukung kutipan dokumen')
+            strict_evidence = fact.get('strict_evidence', False)
+            if not isinstance(strict_evidence, bool):
+                raise ValueError('supporting_facts.strict_evidence harus boolean')
+            fact['strict_evidence'] = strict_evidence
+            if strict_evidence:
+                evidence_text = normalized(" ".join(ref['quote'] for ref in refs))
+                for field in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',
+                              'represented_organization', 'start_date', 'end_date'):
+                    value = fact.get(field)
+                    if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                        raise ValueError(f'supporting_facts.{field} tidak didukung kutipan dokumen')
         job['supporting_facts'] = supporting_facts
     person['employment_history'] = history
 
@@ -479,7 +484,7 @@ def validate_person(root, manifest, plan, payload):
             if receipt['success'] and receipt['evidence_kind'] == 'page' and normalized(employer['employer']) in normalized(receipt['content']):
                 employer['status'] = 'nama_ditemukan_pada_sumber_bukan_bukti_hubungan_kerja'
     structured_applicable = [check for check in person['audit_checks']
-                             if check.get('code') in SERVER_AUDIT_CODES and check.get('applicable')]
+                             if check.get('code') in KAK_MATCH_CODES and check.get('applicable')]
     person['overall'] = (
         'ada_kriteria_tidak_memenuhi' if any(check.get('status') == 'tidak_memenuhi' for check in structured_applicable) else
         'perlu_klarifikasi' if any(check.get('status') == 'perlu_klarifikasi' for check in structured_applicable) else
