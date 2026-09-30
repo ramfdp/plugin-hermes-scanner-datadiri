@@ -373,11 +373,16 @@ def validate_person(root, manifest, plan, payload):
     person['certificates'] = [certificate_result(root, manifest, cert, person['name'], date.fromisoformat(manifest['assessment_date'])) for cert in certificates]
 
     submitted_audit_checks = validate_audit_checks(person.get('audit_checks', []))
-    if any(check.get('code') in FACT_AUDIT_CODES for check in submitted_audit_checks):
-        raise ValueError('Audit #4/#9/#10/#11 dihitung server-side dan tidak boleh dikirim/ditimpa oleh payload')
+    user_audit_checks = []
+    for check in submitted_audit_checks:
+        if check.get('code') in FACT_AUDIT_CODES:
+            if check.get('computed') is True:
+                continue  # Re-validation of a stored server result; recompute it below.
+            raise ValueError('Audit #4/#9/#10/#11 dihitung server-side dan tidak boleh dikirim/ditimpa oleh payload')
+        user_audit_checks.append(check)
     facts = evaluate_history_facts(history, assessment_date)
     person['fact_analysis'] = {key: value for key, value in facts.items() if key != 'audit_checks'}
-    audit_checks = [*submitted_audit_checks, *facts['audit_checks']]
+    audit_checks = [*user_audit_checks, *facts['audit_checks']]
     order = {item['code']: item['number'] for item in AUDIT_CRITERIA}
     audit_checks.sort(key=lambda check: order[check['code']])
     for check in audit_checks:
