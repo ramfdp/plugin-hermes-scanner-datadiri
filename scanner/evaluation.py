@@ -12,7 +12,7 @@ from calendar import monthrange
 from datetime import date
 from difflib import SequenceMatcher
 
-EVALUATION_SCHEMA_VERSION = 3
+EVALUATION_SCHEMA_VERSION = 4
 AUDIT_STATUSES = {"memenuhi", "tidak_memenuhi", "perlu_klarifikasi"}
 
 AUDIT_CRITERIA = (
