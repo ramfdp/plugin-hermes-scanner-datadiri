@@ -13,18 +13,22 @@ from . import __version__, review, storage
 from .validation import records, source_refs, validate_plan
 from .web import normalized
 
-PROTOCOL = 'excel-first-v1'
+PROTOCOL = 'excel-first-v2'
+SUPPORTED_PROTOCOLS = {PROTOCOL, 'excel-first-v1'}
 IDENTITY_FIELDS = ('education', 'certificate_summary', 'claimed_months', 'nik')
 
 
 def _plan_key(plan):
-    data = {key: plan[key] for key in ('roster', 'requirements', 'coverage')}
+    keys = ['roster', 'requirements', 'coverage']
+    if 'page_classification' in plan:
+        keys.append('page_classification')
+    data = {key: plan[key] for key in keys}
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def require_summary(root, manifest):
     """Legacy 0.4 checkpoints remain readable; new Desktop runs cannot skip XLSX."""
-    if manifest.get('workflow') != PROTOCOL:
+    if manifest.get('workflow') not in SUPPORTED_PROTOCOLS:
         return None
     path = root / 'summary.json'
     if not path.is_file():
@@ -71,7 +75,8 @@ def create_summary(root, manifest, payload):
     mapped = {}
     for row in rows:
         person = roster[row['id']]
-        refs = source_refs(root, manifest, row.get('source_refs', []), required=True, kinds={'cv', 'attachment'})
+        refs = source_refs(root, manifest, row.get('source_refs', []), required=True, kinds={'cv', 'attachment'},
+                           page_classification=plan.get('page_classification'))
         for ref in refs:
             if not any(c['document_id'] == ref['document_id'] and person['id'] in c.get('person_ids', []) and
                        c['first_page'] <= ref['page'] <= c['last_page'] for c in plan['coverage']):
@@ -137,7 +142,7 @@ def _progress(root):
         return {'stage': 'ocr', 'pending_document_ids': pending, 'next_action': 'document'}
     if not (root / 'plan.json').exists():
         return {'stage': 'mapping', 'next_action': 'read_document kemudian plan'}
-    if manifest.get('workflow') == PROTOCOL and not (root / 'summary.json').exists():
+    if manifest.get('workflow') in SUPPORTED_PROTOCOLS and not (root / 'summary.json').exists():
         return {'stage': 'summary', 'next_action': 'summary'}
     require_summary(root, manifest)
     if manifest['allow_web'] and not list((root / 'web').glob('*.json')):
@@ -211,7 +216,7 @@ def dispatch(args):
             raise ValueError('Pemetaan sudah menjadi Excel. Gunakan verify_kak untuk receipt/analisis KAK, atau run baru untuk mengubah roster/kriteria')
         if action in {'save_person', 'export'}:
             summary = require_summary(root, manifest)
-            if manifest.get('workflow') == PROTOCOL and manifest['allow_web'] and not list((root / 'web').glob('*.json')):
+            if manifest.get('workflow') in SUPPORTED_PROTOCOLS and manifest['allow_web'] and not list((root / 'web').glob('*.json')):
                 raise ValueError('WEB_REVIEW_REQUIRED: jalankan scanner_web_lookup setelah Excel; kegagalan web juga harus tercatat sebagai receipt')
             if action == 'save_person' and summary:
                 expected = summary['people'].get(payload.get('id'))
