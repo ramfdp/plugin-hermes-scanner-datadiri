@@ -2,10 +2,13 @@
 import copy
 import re
 from datetime import date
+from .evaluation import assign_experience_ids, validate_audit_checks
 from .storage import load
 from .web import normalized, official_url
 
 CHECK_STATUSES = {"memenuhi", "tidak_memenuhi", "belum_dapat_dinilai"}
+PAGE_KINDS = {"cv", "kak", "addendum", "attachment", "unknown"}
+REFERENCE_PAGE_KINDS = {"kak", "addendum"}
 
 
 def require_text(value, label, minimum=1):
@@ -27,7 +30,68 @@ def unique(rows, key, label):
     return values
 
 
-def source_refs(root, manifest, refs, *, required=False, kinds=None):
+def validate_page_classification(root, manifest, value):
+    """Classify every successfully OCR'd page exactly once.
+
+    Older/multi-document clients may omit this field. In that case each page
+    inherits its document kind. Single-PDF v0.5 clients should send explicit
+    ranges so CV, attachments and KAK pages can coexist inside D001.
+    """
+    docs = {doc["id"]: doc for doc in manifest["documents"]}
+    states = {}
+    for doc in manifest["documents"]:
+        path = root / "ocr" / f"{doc['id']}.json"
+        if path.exists():
+            states[doc["id"]] = load(path)
+
+    if value is None:
+        derived = []
+        for doc in manifest["documents"]:
+            state = states.get(doc["id"], {})
+            if state.get("success"):
+                derived.append({"document_id": doc["id"], "first_page": 1,
+                                "last_page": state["page_count"], "kind": doc["kind"]})
+        return derived
+
+    rows = copy.deepcopy(records(value, "page_classification"))
+    assigned = {doc_id: set() for doc_id, state in states.items() if state.get("success")}
+    for row in rows:
+        doc_id = row.get("document_id")
+        kind = row.get("kind")
+        first, last = row.get("first_page"), row.get("last_page")
+        if doc_id not in docs:
+            raise ValueError("page_classification menunjuk dokumen tidak dikenal")
+        state = states.get(doc_id, {})
+        if not state.get("success"):
+            raise ValueError("page_classification hanya boleh menunjuk OCR yang berhasil")
+        if kind not in PAGE_KINDS:
+            raise ValueError("page_classification.kind harus cv/kak/addendum/attachment/unknown")
+        if type(first) is not int or type(last) is not int or not 1 <= first <= last <= state["page_count"]:
+            raise ValueError("Rentang page_classification tidak valid")
+        pages = set(range(first, last + 1))
+        if assigned[doc_id] & pages:
+            raise ValueError("page_classification tumpang tindih pada halaman yang sama")
+        assigned[doc_id].update(pages)
+
+    for doc_id, pages in assigned.items():
+        state = states[doc_id]
+        expected = set(range(1, state["page_count"] + 1))
+        if pages != expected:
+            raise ValueError(f"Semua halaman {doc_id} wajib memiliki page_classification tepat satu kali")
+    return rows
+
+
+def page_kind(classification, manifest, document_id, page):
+    if type(page) is not int:
+        return None
+    for row in classification or []:
+        if row.get("document_id") == document_id and row.get("first_page", 0) <= page <= row.get("last_page", -1):
+            return row.get("kind")
+    doc = next((item for item in manifest["documents"] if item["id"] == document_id), None)
+    return doc.get("kind") if doc else None
+
+
+def source_refs(root, manifest, refs, *, required=False, kinds=None, page_classification=None):
     refs = records(refs, "source_refs")
     if required and not refs:
         raise ValueError("Bukti dokumen dan halaman wajib")
@@ -35,11 +99,15 @@ def source_refs(root, manifest, refs, *, required=False, kinds=None):
     for ref in refs:
         doc = docs.get(ref.get("document_id"))
         page = ref.get("page")
-        if not doc or (kinds and doc["kind"] not in kinds):
+        if not doc:
             raise ValueError("Referensi dokumen tidak sesuai")
         state = load(root / "ocr" / f"{doc['id']}.json")
         if not state.get("success") or type(page) is not int or not 1 <= page <= state["page_count"]:
             raise ValueError("Referensi halaman di luar OCR berhasil")
+        if kinds:
+            semantic_kind = page_kind(page_classification, manifest, doc["id"], page)
+            if semantic_kind not in kinds:
+                raise ValueError("Referensi dokumen tidak sesuai")
         quote = require_text(ref.get("quote"), "quote")
         from pathlib import Path
         content = Path(state["markdown_files"][page-1]).read_text(encoding="utf-8")
@@ -50,6 +118,9 @@ def source_refs(root, manifest, refs, *, required=False, kinds=None):
 
 def validate_plan(root, manifest, payload):
     plan = copy.deepcopy(payload)
+    classification = validate_page_classification(root, manifest, plan.get("page_classification"))
+    plan["page_classification"] = classification
+
     roster = records(plan.get("roster"), "roster")
     if not roster:
         raise ValueError("Roster tidak boleh kosong; dokumentasikan CV yang gagal melalui coverage")
@@ -62,11 +133,14 @@ def validate_plan(root, manifest, payload):
             raise ValueError("ID personel hanya huruf, angka, _, -")
         require_text(person.get("name"), "roster.name")
         require_text(person.get("role"), "roster.role")
-        source_refs(root, manifest, person.get("cv_refs", []), required=True, kinds={"cv"})
+        source_refs(root, manifest, person.get("cv_refs", []), required=True, kinds={"cv"},
+                    page_classification=classification)
         inventory = records(person.get("certificate_inventory", []), "certificate_inventory")
         unique(inventory, "id", "certificate_inventory")
         for cert in inventory:
-            source_refs(root, manifest, cert.get("source_refs", []), required=True)
+            source_refs(root, manifest, cert.get("source_refs", []), required=True,
+                        kinds={"cv", "attachment"}, page_classification=classification)
+
     requirements = records(plan.get("requirements"), "requirements")
     unique(requirements, "id", "requirements")
     for requirement in requirements:
@@ -77,12 +151,15 @@ def validate_plan(root, manifest, payload):
         minimum = requirement.get("minimum_months")
         if minimum is not None and (type(minimum) is not int or minimum < 0):
             raise ValueError("minimum_months harus integer >= 0 atau null")
-        source_refs(root, manifest, requirement.get("source_refs", []), required=True, kinds={"kak", "addendum"})
+        source_refs(root, manifest, requirement.get("source_refs", []), required=True,
+                    kinds=REFERENCE_PAGE_KINDS, page_classification=classification)
+
     kak = plan.get("kak")
     if not isinstance(kak, dict):
         raise ValueError("kak wajib object metadata: title, version, package_id, analysis")
     require_text(kak.get("analysis"), "kak.analysis", 20)
-    kak["status"] = "dokumen_diberikan_belum_diautentikasi" if any(d['kind'] == 'kak' for d in manifest['documents']) else "tidak_tersedia"
+    has_kak_pages = any(row["kind"] == "kak" for row in classification)
+    kak["status"] = "dokumen_diberikan_belum_diautentikasi" if has_kak_pages else "tidak_tersedia"
     # A matching public package can support provenance, never blanket legal validity.
     for rid in kak.get("receipt_ids", []):
         receipt = read_receipt(root, rid)
@@ -91,8 +168,9 @@ def validate_plan(root, manifest, payload):
                 all(official_url(u) for u in receipt['urls']) and all(identity) and
                 all(normalized(x) in normalized(receipt['content']) for x in identity)):
             kak["status"] = "identitas_paket_dan_versi_ditemukan_pada_sumber"
+
     coverage = records(plan.get("coverage"), "coverage")
-    if any(c.get('document_id') not in {d['id'] for d in manifest['documents']} for c in coverage):
+    if any(item.get('document_id') not in {d['id'] for d in manifest['documents']} for item in coverage):
         raise ValueError('Coverage menunjuk dokumen tidak dikenal')
     for doc in manifest["documents"]:
         state = load(root / "ocr" / f"{doc['id']}.json")
@@ -108,8 +186,17 @@ def validate_plan(root, manifest, payload):
             targets = item.get("person_ids", [])
             if not isinstance(targets, list) or any(pid not in ids for pid in targets):
                 raise ValueError("Coverage menunjuk personel yang tidak terdaftar")
-            if not targets and item.get("reason") not in {"blank", "cover", "unassigned", "unreadable"}:
-                raise ValueError("Halaman tanpa personel memerlukan reason blank/cover/unassigned/unreadable")
+            semantic_kinds = {page_kind(classification, manifest, doc["id"], page) for page in range(first, last + 1)}
+            reason = item.get("reason")
+            if targets and semantic_kinds & REFERENCE_PAGE_KINDS:
+                raise ValueError("Halaman KAK/addendum tidak boleh dimiliki personel pada coverage")
+            if not targets:
+                if reason not in {"blank", "cover", "unassigned", "unreadable", "reference"}:
+                    raise ValueError("Halaman tanpa personel memerlukan reason blank/cover/unassigned/unreadable/reference")
+                if reason == "reference" and not semantic_kinds <= REFERENCE_PAGE_KINDS:
+                    raise ValueError("reason reference hanya untuk halaman KAK/addendum")
+                if semantic_kinds <= REFERENCE_PAGE_KINDS and reason != "reference":
+                    raise ValueError("Halaman KAK/addendum tanpa personel harus memakai reason reference")
             covered.update(range(first, last+1))
         if covered != set(range(1, state["page_count"]+1)):
             raise ValueError(f"Semua halaman {doc['id']} harus memiliki coverage")
@@ -119,7 +206,6 @@ def validate_plan(root, manifest, payload):
                        x['first_page'] <= ref['page'] <= x['last_page'] for x in coverage):
                 raise ValueError("cv_refs personel harus sesuai coverage")
     return plan
-
 
 def read_receipt(root, receipt_id):
     if not isinstance(receipt_id, str) or not re.fullmatch(r"W[a-f0-9]{16}", receipt_id):
@@ -201,13 +287,14 @@ def validate_person(root, manifest, plan, payload):
         raise ValueError("Personel tidak ada dalam roster")
     person['name'], person['role'] = roster['name'], roster['role']
     require_text(person.get('summary'), 'summary', 30)
-    doc_kinds = {d['id']: d['kind'] for d in manifest['documents']}
+    classification = plan.get('page_classification', [])
 
     def own_refs(refs):
         for ref in refs:
-            if doc_kinds.get(ref.get('document_id')) in {'cv', 'attachment'} and not any(
-                c['document_id'] == ref['document_id'] and person['id'] in c.get('person_ids', []) and
-                c['first_page'] <= ref['page'] <= c['last_page'] for c in plan['coverage']
+            semantic_kind = page_kind(classification, manifest, ref.get('document_id'), ref.get('page'))
+            if semantic_kind in {'cv', 'attachment'} and not any(
+                item['document_id'] == ref['document_id'] and person['id'] in item.get('person_ids', []) and
+                item['first_page'] <= ref['page'] <= item['last_page'] for item in plan['coverage']
             ):
                 raise ValueError('Bukti halaman bukan milik personel menurut coverage')
 
@@ -238,14 +325,16 @@ def validate_person(root, manifest, plan, payload):
         if check['status'] == 'belum_dapat_dinilai':
             require_text(check.get('clarification'), 'clarification')
         check['requirement'] = required[check['requirement_id']]['text']
-    history = records(person.get('employment_history', []), 'employment_history')
+
+    history = assign_experience_ids(records(person.get('employment_history', []), 'employment_history'))
     for job in history:
         require_text(job.get('employer'), 'employer')
         source_refs(root, manifest, job.get('source_refs', []), required=True)
         source_refs(root, manifest, job.get('supporting_refs', []))
     person['chronology'] = chronology(history, date.fromisoformat(manifest['assessment_date']))
+
     certificates = records(person.get('certificates'), 'certificates')
-    inventory = {c['id']: c for c in roster.get('certificate_inventory', [])}
+    inventory = {cert['id']: cert for cert in roster.get('certificate_inventory', [])}
     if set(unique(certificates, 'inventory_id', 'certificates')) != set(inventory):
         raise ValueError('certificates harus mencakup semua certificate_inventory, tanpa tambahan atau duplikat')
     for cert in certificates:
@@ -253,12 +342,21 @@ def validate_person(root, manifest, plan, payload):
             raise ValueError('Bukti sertifikat harus sama dengan inventory plan')
     if not certificates:
         require_text(person.get('certificate_limitation'), 'certificate_limitation')
-    person['certificates'] = [certificate_result(root, manifest, c, person['name'], date.fromisoformat(manifest['assessment_date'])) for c in certificates]
+    person['certificates'] = [certificate_result(root, manifest, cert, person['name'], date.fromisoformat(manifest['assessment_date'])) for cert in certificates]
+
+    audit_checks = validate_audit_checks(person.get('audit_checks', []))
+    for check in audit_checks:
+        source_refs(root, manifest, check.get('source_refs', []), required=check.get('applicable', True))
+        own_refs(check.get('source_refs', []))
+        source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,
+                    page_classification=classification)
+    person['audit_checks'] = audit_checks
+
     findings = person.get('findings', [])
     if not isinstance(findings, list) or any(not isinstance(x, str) for x in findings):
         raise ValueError("findings harus array teks")
     employers = records(person.get('employer_checks', []), 'employer_checks')
-    if {normalized(j['employer']) for j in history} != {normalized(j.get('employer', '')) for j in employers}:
+    if {normalized(job['employer']) for job in history} != {normalized(item.get('employer', '')) for item in employers}:
         raise ValueError("employer_checks harus mencakup semua perusahaan dalam riwayat")
     for employer in employers:
         require_text(employer.get('analysis'), 'employer.analysis', 20)
@@ -271,8 +369,9 @@ def validate_person(root, manifest, plan, payload):
             if receipt['success'] and receipt['evidence_kind'] == 'page' and normalized(employer['employer']) in normalized(receipt['content']):
                 employer['status'] = 'nama_ditemukan_pada_sumber_bukan_bukti_hubungan_kerja'
     person['overall'] = ('tidak_ada_kriteria_KAK' if not checks else
-                         'ada_kriteria_tidak_memenuhi' if any(c['status'] == 'tidak_memenuhi' for c in checks) else
-                         'perlu_klarifikasi' if any(c['status'] == 'belum_dapat_dinilai' for c in checks) else
+                         'ada_kriteria_tidak_memenuhi' if any(check['status'] == 'tidak_memenuhi' for check in checks) else
+                         'perlu_klarifikasi' if any(check['status'] == 'belum_dapat_dinilai' for check in checks) else
                          'kriteria_diperiksa_memenuhi')
     person['review_note'] = 'Hasil bantu pemeriksaan dokumen; bukan keputusan menerima/menolak personel.'
     return person
+
