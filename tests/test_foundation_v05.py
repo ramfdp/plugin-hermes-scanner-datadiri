@@ -143,7 +143,9 @@ class FoundationV05Test(unittest.TestCase):
     def test_evaluation_catalog_is_complete_unique_and_strict(self):
         metadata = evaluation_metadata()
         self.assertEqual(metadata['criteria_count'], 15)
-        self.assertEqual(metadata['implemented_codes'], ['identity_consistency', 'project_duplicate', 'project_overlap', 'project_period_accuracy'])
+        self.assertEqual(len(metadata['implemented_codes']), 12)
+        self.assertIn('education_major_match', metadata['implemented_codes'])
+        self.assertIn('technical_competency_match', metadata['implemented_codes'])
         self.assertEqual([item['number'] for item in AUDIT_CRITERIA], list(range(1, 16)))
         self.assertEqual(len({item['code'] for item in AUDIT_CRITERIA}), 15)
         self.assertEqual(AUDIT_STATUSES, {'memenuhi', 'tidak_memenuhi', 'perlu_klarifikasi'})
