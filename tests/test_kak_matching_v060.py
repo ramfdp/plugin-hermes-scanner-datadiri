@@ -166,7 +166,7 @@ class KakMatchingV060Test(unittest.TestCase):
                 'supporting_facts': [{
                     'project': 'Proyek Jembatan Sungai', 'employer': 'PT Konsultan A',
                     'role': 'Site Engineer', 'client': 'Dinas PU', 'consultant': 'PT Konsultan A',
-                    'contractor': 'PT Kontraktor A',
+                    'contractor': 'PT Kontraktor A', 'strict_evidence': True,
                     'start_date': '2020-01', 'end_date': '2021-12',
                     'source_refs': [self.ref(5, 'Proyek Jembatan Sungai\\nPT Konsultan A\\nSite Engineer\\nPemberi Kerja Dinas PU\\nKonsultan PT Konsultan A\\nKontraktor PT Kontraktor A\\n2020-01 sampai 2021-12')],
                 }],
