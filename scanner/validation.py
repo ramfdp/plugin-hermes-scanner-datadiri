@@ -370,6 +370,12 @@ def validate_person(root, manifest, plan, payload):
             refs = source_refs(root, manifest, fact.get('source_refs', []), required=True,
                                kinds={'cv', 'attachment'}, page_classification=classification)
             own_refs(refs)
+            evidence_text = normalized(" ".join(ref['quote'] for ref in refs))
+            for field in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',
+                          'represented_organization', 'start_date', 'end_date'):
+                value = fact.get(field)
+                if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                    raise ValueError(f'supporting_facts.{field} tidak didukung kutipan dokumen')
         job['supporting_facts'] = supporting_facts
     person['employment_history'] = history
 
@@ -387,6 +393,11 @@ def validate_person(root, manifest, plan, payload):
         support = source_refs(root, manifest, record.get('supporting_refs', []),
                               kinds={'cv', 'attachment'}, page_classification=classification)
         own_refs(support)
+        evidence_text = normalized(" ".join(ref['quote'] for ref in [*refs, *support]))
+        for field in ('level', 'major', 'institution', 'degree'):
+            value = record.get(field)
+            if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                raise ValueError(f'education_records.{field} tidak didukung kutipan dokumen')
     person['education_records'] = education_records
 
     semantic_assessments = validate_semantic_assessments(
