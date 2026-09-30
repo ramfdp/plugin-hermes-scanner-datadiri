@@ -222,6 +222,7 @@ def export(root):
             errors.append({'file': name, 'error': type(exc).__name__, 'message': str(exc)})
     result = {'success': len(artifacts) == 2, 'run_id': data['run_id'], 'report_complete': data['report_complete'],
               'person_count': len(data['people']), 'artifacts': artifacts, 'errors': errors,
+              'conclusions': [{'person_id': p['id'], **p.get('final_conclusion', {})} for p in data['people']],
               'limitations': data['limitations'], 'snapshot_sha256': data['snapshot_sha256'],
               'chat_markdown': '\n\n'.join(f"[{a['name']}]({a['url']})" for a in artifacts),
               'instruction': 'Tampilkan ringkasan faktual lalu dua link artefak ini saja; JSON tetap lokal. Jangan menyatakan seluruhnya terverifikasi.'}
@@ -271,9 +272,11 @@ def dispatch(args):
             storage.save(root / 'people' / f"{person['id']}.json", person)
             storage.event(root, 'save_person', person_id=person['id'])
             return {'success': True, 'person_id': person['id'], 'overall': person['overall'],
+                    'final_conclusion': person.get('final_conclusion'),
                     'audit_checks': [{'code': check['code'], 'applicable': check.get('applicable', True),
                                       'status': check.get('status')} for check in person.get('audit_checks', [])],
                     'kak_match_detail_count': len(person.get('kak_match_details', [])),
+                    'anomaly_count': len(person.get('anomalies', [])),
                     'certificates': [{'number': c.get('number'), 'status': c['status'], 'reason': c['reason']} for c in person['certificates']]}
         if action == 'status':
             plan = storage.load(root / 'plan.json') if (root / 'plan.json').exists() else {}
