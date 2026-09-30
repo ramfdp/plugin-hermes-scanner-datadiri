@@ -50,6 +50,8 @@ def render(data, path):
     field('Disusun:', data['created_at'])
     field('Personel dalam roster:', len(data['people']))
     field('Cakupan:', 'Parsial / terdapat keterbatasan' if data['limitations'] else 'Seluruh roster diproses; bukan berarti semua klaim terverifikasi')
+    field('Schema review / evaluasi:', f"{data.get('schema_version', '-')} / {data.get('evaluation', {}).get('schema_version', '-')}")
+    field('Kriteria audit terdaftar:', data.get('evaluation', {}).get('criteria_count', 0))
     add('Laporan bantu pemeriksaan dokumen. Hasil OCR, interpretasi KAK dan temuan daring harus ditinjau manusia. Laporan ini bukan sertifikat keabsahan maupun keputusan menerima/menolak personel.')
     add('1. Dasar dan batas pemeriksaan', heading)
     field('KAK:', data['kak'].get('title', 'Tidak tersedia'))
@@ -90,7 +92,7 @@ def render(data, path):
         if chronology['uncertain_entries']:
             field('Entri belum dapat dihitung:', ', '.join(map(str, chronology['uncertain_entries'])))
         for job in person['employment_history']:
-            add(f"{job['employer']} | {job.get('role', '')}", sub)
+            add(f"{job.get('id', 'Experience')} | {job['employer']} | {job.get('role', '')}", sub)
             field('Periode asli:', f"{job.get('start_date','?')} sampai {job.get('end_date','?')}")
             field('Proyek / tanggung jawab:', f"{job.get('project','-')} / {job.get('responsibilities','-')}")
             refs(job.get('source_refs', []))
@@ -125,6 +127,9 @@ def render(data, path):
     for doc in data['documents']:
         add(f"{doc['id']} | {doc['kind']} | {doc['name']}", sub)
         add('SHA256: ' + doc['sha256'], small)
+    add('Klasifikasi halaman', heading)
+    for row in data.get('page_classification', []):
+        add(f"{row['document_id']} h.{row['first_page']}-{row['last_page']} | {row['kind']}", small)
     for requirement in data['requirements']:
         add(f"{requirement['id']} | {requirement['text']}", sub)
         refs(requirement['source_refs'])

@@ -1,4 +1,4 @@
-# Progres langsung Scanner v0.4.4
+# Progres langsung Scanner v0.5.0
 
 Input tetap satu PDF dan satu tombol **Mulai scan**. KAK/form tambahan tidak diwajibkan.
 
@@ -66,7 +66,7 @@ Setelah merge/pull, jalankan script sinkronisasi yang sudah biasa dipakai dari r
 repo dengan home/profil yang sebelumnya benar. `scripts/sync_plugin.ps1` sekarang
 juga menyalin folder `dashboard/`; backup dan perlindungan target tetap berlaku.
 **Restart backend/gateway** diperlukan untuk memuat route API baru, lalu **Reload
-desktop plugins**. Popup harus v0.4.4. Tidak perlu isian baru setiap kali scan.
+desktop plugins**. Popup harus v0.5.0. Tidak perlu isian baru setiap kali scan.
 
 Pemeriksaan `doctor.py --compare-installed` juga membandingkan file API progres.
 Jika panel gagal terhubung tetapi OCR berjalan, periksa dashboard/manifest.json,

@@ -1,4 +1,4 @@
-# Kontrak review v1
+# Kontrak review v2 (Foundation 0.5)
 
 Semua ID/receipt diperoleh dari tool, bukan dibuat agar hasil terlihat lengkap.
 File OCR dan JSON kerja tetap lokal; data yang dibaca agent mengikuti kebijakan provider model.
@@ -48,7 +48,11 @@ Contoh struktur (ganti kutipan dengan teks OCR yang sebenarnya):
    "cv_refs":[{"document_id":"D001","page":1,"quote":"Personel Contoh"}],
    "certificate_inventory":[{"id":"C1","source_refs":[{"document_id":"D003","page":1,"quote":"Sertifikat Contoh"}]}]}],
  "coverage":[{"document_id":"D001","first_page":1,"last_page":1,"person_ids":["P01"]},
-             {"document_id":"D003","first_page":1,"last_page":1,"person_ids":["P01"]}]}
+             {"document_id":"D003","first_page":1,"last_page":1,"person_ids":["P01"]}],
+ "page_classification":[
+   {"document_id":"D001","first_page":1,"last_page":1,"kind":"cv"},
+   {"document_id":"D002","first_page":1,"last_page":1,"kind":"kak"},
+   {"document_id":"D003","first_page":1,"last_page":1,"kind":"attachment"}]}
 ```
 `kind` kriteria: `education`, `experience`, `certificate`, `other`.
 `role` harus persis posisi roster atau `*` untuk kriteria semua posisi.
@@ -56,7 +60,13 @@ Untuk durasi minimum gunakan `minimum_months` integer >=0 dari KAK, bukan tebaka
 KAK tidak ada: `requirements=[]`, metadata/analysis menyatakan belum tersedia.
 Status provenance KAK dihitung server, bukan legalitas keseluruhan dokumen.
 
-Setiap halaman CV/lampiran wajib tercakup. Halaman tak terkait: `person_ids:[]` dengan
+Setiap halaman OCR berhasil harus memiliki tepat satu `page_classification`: `cv`, `attachment`,
+`kak`, `addendum`, atau `unknown`. Jika field ini dihilangkan oleh klien lama, halaman mewarisi jenis
+dokumen induknya. Untuk Desktop satu-PDF v0.5, field ini wajib disusun agar halaman KAK di dalam D001
+tetap dapat menjadi bukti requirement. Halaman KAK/addendum pada coverage memakai `person_ids:[]` dan
+`reason:"reference"`; halaman tersebut tidak boleh dimiliki personel.
+
+Setiap halaman CV/lampiran wajib tercakup. Halaman tak terkait lain: `person_ids:[]` dengan
 `reason` `blank`, `cover`, `unassigned`, atau `unreadable`. Dua alasan terakhir membuat laporan parsial.
 Seluruh sertifikat harus ada di `certificate_inventory`, termasuk yang tidak terbaca jelas.
 Jangan menggabungkan identitas hanya karena nama mirip. Minta klarifikasi bila pembagian ambigu.
@@ -110,6 +120,7 @@ Semua kriteria yang berlaku harus memiliki satu check, dan semua certificate_inv
    "analysis":"Nomor tersedia dalam lampiran tetapi data sertifikat belum dapat diperiksa pada portal resmi.",
    "source_refs":[{"document_id":"D003","page":1,"quote":"Sertifikat Contoh"}]}],
  "certificate_limitation":"",
+ "audit_checks":[],
  "findings":["Keabsahan sertifikat belum dapat dipastikan tanpa hasil portal penerbit."]}
 ```
 Check status hanya `memenuhi`, `tidak_memenuhi`, `belum_dapat_dinilai`. Status final bukan skor penerimaan.
@@ -123,7 +134,7 @@ Tanggal dokumen dinilai terpisah, bukan jaminan sertifikat belum dicabut; jangan
 `source_refs` sertifikat harus sama dengan inventory. Sertifikat tidak ada: `certificates=[]`, inventory kosong,
 dan `certificate_limitation` wajib menjelaskan keterbatasan.
 
-Semua perusahaan di employment_history wajib memiliki employer_check (boleh belum terverifikasi).
+Setiap baris `employment_history` memperoleh `id` snapshot-local (`E001`, `E002`, dst.) jika ID belum diberikan. Semua perusahaan di employment_history wajib memiliki employer_check (boleh belum terverifikasi).
 Hasil portal boleh ditambahkan melalui receipt_id + quote. Keberadaan perusahaan bukan bukti hubungan kerja.
 Tanggal riwayat harus persis presisi yang tersedia: YYYY, YYYY-MM atau YYYY-MM-DD; jangan mengarang bulan.
 Hitungan server hanya indikator bulan kalender inklusif untuk YYYY-MM dan tidak menghitung overlap dua kali.
@@ -139,3 +150,16 @@ File baru ditempatkan pada folder ekspor unik; hasil sebelumnya tidak ditimpa.
 Tampilkan ringkasan faktual + `chat_markdown` dari tool, hanya XLSX/PDF. Jangan tautkan JSON kerja.
 
 Bukti source_refs untuk CV/lampiran harus berasal dari halaman milik personel pada coverage. Nomor, pemegang, skema dan penerbit sertifikat harus muncul pada kutipan dokumen yang dipetakan. Teks web sertifikat maksimal 2.000 karakter dari record yang sama. Hitungan bulan kalender mengecualikan bulan penilaian yang belum selesai dan semua bulan setelahnya.
+
+
+### audit_checks v2
+
+Foundation 0.5 mendaftarkan 15 kode audit di `scanner/evaluation.py`. Field
+`audit_checks` pada personel opsional selama evaluator revisi 1-15 belum
+diaktifkan. Jika sebuah check dikirim, `code` harus berasal dari katalog,
+`applicable` adalah boolean, dan status yang diizinkan hanya
+`memenuhi`, `tidak_memenuhi`, atau `perlu_klarifikasi`.
+Status `perlu_klarifikasi` wajib memiliki klarifikasi. Bukti kandidat memakai
+`source_refs`; bukti KAK memakai `kak_refs` yang harus menunjuk halaman
+berklasifikasi `kak` atau `addendum`. Foundation tidak menghitung kesimpulan
+akhir 15 poin sampai evaluator masing-masing revisi diimplementasikan.

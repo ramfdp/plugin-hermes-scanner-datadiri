@@ -6,6 +6,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 from . import storage
+from .evaluation import evaluation_metadata
 from .validation import validate_plan, validate_person, read_receipt
 
 KINDS = {"cv", "kak", "addendum", "attachment"}
@@ -45,7 +46,7 @@ def start(payload):
     run_id = uuid.uuid4().hex
     root = storage.run_dir(run_id)
     root.mkdir(parents=True, exist_ok=False)
-    manifest = {'schema_version': 1, 'run_id': run_id, 'project': payload['project'].strip(),
+    manifest = {'schema_version': 2, 'run_id': run_id, 'project': payload['project'].strip(),
                 'assessment_date': assessment, 'allow_web': payload['allow_web'], 'created_at': storage.now(),
                 'documents': documents, 'expected_person_count': payload.get('expected_person_count')}
     storage.save(root / 'manifest.json', manifest)
@@ -141,6 +142,9 @@ def snapshot(root):
     for row in plan['coverage']:
         if row.get('reason') in {'unassigned', 'unreadable'}:
             limitations.append(f"{row['document_id']} halaman {row['first_page']}-{row['last_page']}: {row['reason']}")
+    for row in plan.get('page_classification', []):
+        if row.get('kind') == 'unknown':
+            limitations.append(f"{row['document_id']} halaman {row['first_page']}-{row['last_page']}: jenis halaman belum teridentifikasi.")
     if not plan['requirements']:
         limitations.append('Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.')
     if not manifest['allow_web']:
@@ -169,10 +173,11 @@ def snapshot(root):
     receipts = [read_receipt(root, rid) for rid in sorted(receipt_ids)]
     # Do not export raw tool results, local paths, or full OCR into public-facing outputs.
     docs = [{k: d[k] for k in ('id', 'kind', 'name', 'sha256')} for d in manifest['documents']]
-    return {'schema_version': 1, 'run_id': manifest['run_id'], 'project': manifest['project'],
+    return {'schema_version': 2, 'run_id': manifest['run_id'], 'project': manifest['project'],
             'assessment_date': manifest['assessment_date'], 'created_at': storage.now(),
             'documents': docs, 'kak': plan['kak'], 'requirements': plan['requirements'], 'people': people,
-            'coverage': plan['coverage'], 'limitations': limitations, 'report_complete': not limitations,
+            'coverage': plan['coverage'], 'page_classification': plan.get('page_classification', []),
+            'evaluation': evaluation_metadata(), 'limitations': limitations, 'report_complete': not limitations,
             'sources': [{k: r.get(k) for k in ('id', 'tool', 'purpose', 'checked_at', 'success', 'urls', 'evidence_kind')} for r in receipts]}
 
 

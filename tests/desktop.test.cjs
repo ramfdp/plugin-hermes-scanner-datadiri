@@ -77,6 +77,7 @@ test('one PDF only starts on explicit button and attaches to bound session', asy
   assert.match(prompt, /read_document/); assert.match(prompt, /certificate_inventory/)
   assert.match(prompt, /chat_markdown/); assert.match(prompt, /XLSX dan PDF/)
   assert.match(prompt, /scanner_web_lookup/); assert.match(prompt, /save_person/)
+  assert.match(prompt, /page_classification/); assert.match(prompt, /excel-first-v2/)
 })
 
 test('KAK and every manual metadata field are absent and cannot block a single PDF', async () => {
@@ -93,7 +94,7 @@ test('KAK and every manual metadata field are absent and cannot block a single P
   assert.equal(data.expected_person_count, null)
   assert.equal(data.allow_web, true)
   assert.match(h.calls.at(-1).args.text, /requirements=\[\]/)
-  assert.match(h.calls.at(-1).args.text, /TANPA meminta KAK/)
+  assert.match(h.calls.at(-1).args.text, /TANPA meminta.*KAK/)
 })
 
 test('empty non-PDF and oversized files are rejected before session creation', async () => {
@@ -161,7 +162,7 @@ test('workflow prompt requires summary before web and prohibits ad-hoc code repa
   assert.ok(prompt.indexOf('4. Panggil action="summary"') < prompt.indexOf('5. Setelah summary berhasil'))
   assert.match(prompt, /workflow_complete=true/)
   assert.match(prompt, /Jangan mengedit source, membuat shim ocr_runner.py/)
-  assert.match(prompt, /"workflow_version":"0.4.4"/)
+  assert.match(prompt, /"workflow_version":"0.5.0"/)
   assert.match(prompt, /Hanya gunakan path dalam manifest/)
 })
 
@@ -185,7 +186,7 @@ test('new chat creates and activates a session before attachment, without a dumm
   assert.equal(h.opens[0].id, 'new-stored')
   assert.equal(h.calls.filter(c => c.name === 'prompt.submit').length, 1)
   for (const call of h.calls.slice(1)) assert.equal(call.args.session_id, 'new-runtime')
-  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.4.4/)
+  assert.match(h.calls.at(-1).args.text, /WORKFLOW SCANNER 0.5.0/)
 })
 
 test('duplicate starts while creating a session issue just one create and one prompt', async () => {
