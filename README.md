@@ -1,4 +1,4 @@
-# Scanner Data Diri 0.4
+# Scanner Data Diri 0.5
 
 Plugin Hermes untuk OCR lokal beberapa CV, KAK, addendum dan lampiran; pemeriksaan berbasis bukti;
 serta **satu Excel ringkasan + satu PDF laporan** pada chat. DOCX legacy tetap tersedia sebagai tool terpisah.
@@ -11,7 +11,8 @@ __init__.py / plugin.yaml   Registrasi plugin Hermes
 scanner/tools.py           Batas subprocess dan validasi hasil tool
 scanner/ocr.py             MinerU lokal, satu halaman/batch
 scanner/review.py           Alur run dan checkpoint per personel
-scanner/validation.py       Kriteria, coverage, kutipan, identitas sertifikat
+scanner/validation.py       Coverage, klasifikasi halaman, kutipan, identitas sertifikat
+scanner/evaluation.py       Kontrak evaluasi v2 dan 15 kode audit KAK
 scanner/web.py              Dispatch web/browser Hermes dan receipt nyata
 scanner/renderers/          PDF dan workbook dari snapshot yang sama
 scanner/exporter.py         Kompatibilitas Excel lama + helper workbook
@@ -66,16 +67,18 @@ Aktifkan tool web/browser pada Hermes (`hermes tools`) dan provider yang diperlu
 `scanner_web_lookup` memakai API publik `ctx.dispatch_tool`; tanpa dukungan itu, verifikasi daring gagal
 secara eksplisit dan laporan tetap dapat memuat status belum terverifikasi.
 
-Ketik `/scanner-data`, isi nama pekerjaan, tanggal acuan dan file per kategori. KAK opsional hanya setelah
-konfirmasi eksplisit bahwa kesesuaiannya belum bisa dinilai. Isi jumlah personel yang diharapkan untuk
-mendeteksi roster yang terlewat. Satu PDF gabungan cukup dipilih sekali sebagai CV.
+Ketik `/scanner-data`, pilih **satu PDF**, lalu tekan **Mulai scan**. Nama laporan berasal dari nama
+file, tanggal acuan diisi otomatis, dan jumlah personel dipetakan dari seluruh halaman. PDF boleh berisi
+beberapa CV, ijazah, sertifikat, lampiran, serta halaman KAK/addendum. v0.5 mengklasifikasikan setiap
+halaman sebagai `cv`, `attachment`, `kak`, `addendum`, atau `unknown`; nama file tidak pernah dianggap
+bukti bahwa sebuah halaman adalah KAK. Klien backend multi-dokumen tetap didukung.
 
 Hermes membaca kontrak payload, memproses setiap dokumen, menyusun kriteria dan roster, melakukan
 pemeriksaan sumber, menyimpan analisis tiap personel, lalu mengekspor dua file. Laporan tidak bergantung
 pada panjang jawaban chat. Status **file berhasil dibuat** terpisah dari **dokumen/sertifikat terverifikasi**.
 Semua artefak diberi lokasi ekspor unik dan hash snapshot yang sama.
 
-Excel mempertahankan sembilan kolom ringkasan, disertai lembar KAK, sertifikat, riwayat, review, sumber dan info.
+Excel mempertahankan sembilan kolom ringkasan, disertai lembar KAK, sertifikat, riwayat, klasifikasi halaman, review, sumber dan info.
 Pengalaman pada ringkasan adalah klaim CV; hitungan kronologi/durasi didukung bukti dipisahkan di detail.
 PDF memuat analisis setiap kriteria/personel, keterbatasan, sumber dan referensi halaman.
 Tidak menyertakan seluruh scan asli secara otomatis. Referensi halaman dan kutipan menggantikan lampiran
@@ -96,6 +99,7 @@ KAK yang salah paket/versi tidak boleh diganti dengan hasil pencarian generik.
 ## Data, keamanan dan debugging
 
 `output/reviews/<run_id>/`: `manifest.json`, `ocr/`, `plan.json`, `people/`, `web/`, `events.jsonl`, `artifacts/`.
+Folder lokal `.hermes/` di-ignore dan tidak boleh dipakai sebagai fixture dokumen kandidat di Git. Fixture test harus sintetis.
 `events.jsonl` hanya berisi tahap/ID/jumlah, bukan isi CV/NIK/kredensial. File JSON kerja dan receipt tetap
 sensitif; jangan diunggah ke Git atau dibagikan tanpa penyamaran. Tidak ada penghapusan otomatis hasil kerja.
 
