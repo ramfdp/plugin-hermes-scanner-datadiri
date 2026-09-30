@@ -34,19 +34,26 @@ def render(data, path):
                     for p in data['people'] for c in p['certificates']]
     detail_sheet(book, 'Verifikasi Sertifikat', ['ID', 'Personel', 'Nomor', 'Pemegang', 'Penerbit', 'Skema', 'Jenjang', 'Terbit', 'Berlaku sampai',
                  'Verifikasi identitas', 'Tanggal dokumen', 'Analisis', 'Batas verifikasi', 'Receipt', 'Diperiksa', 'Bukti'], certificates)
-    history = [[p['id'], p['name'], h['employer'], h.get('role', ''), h.get('start_date', ''), h.get('end_date', ''),
+    history = [[p['id'], p['name'], h.get('id', ''), h['employer'], h.get('role', ''), h.get('start_date', ''), h.get('end_date', ''),
                 h.get('relevant'), h.get('project', ''), h.get('responsibilities', ''), refs(h.get('source_refs', [])), refs(h.get('supporting_refs', []))]
                for p in data['people'] for h in p['employment_history']]
-    detail_sheet(book, 'Riwayat Pekerjaan', ['ID', 'Personel', 'Perusahaan', 'Jabatan', 'Mulai asli', 'Selesai asli', 'Relevan', 'Proyek', 'Tanggung jawab', 'CV', 'Lampiran'], history)
+    detail_sheet(book, 'Riwayat Pekerjaan', ['ID', 'Personel', 'Experience ID', 'Perusahaan', 'Jabatan', 'Mulai asli', 'Selesai asli', 'Relevan', 'Proyek', 'Tanggung jawab', 'CV', 'Lampiran'],
+                 history, [12,24,16,28,24,16,16,12,36,50,50,50])
     detail_sheet(book, 'Ringkasan Review', ['ID', 'Personel', 'Ringkasan analisis', 'Status kriteria', 'Bulan klaim', 'Bulan kalender unik',
                  'Bulan relevan', 'Bulan relevan didukung', 'Periode tak dihitung', 'Metode', 'Temuan', 'Keterbatasan sertifikat'],
                  [[p['id'], p['name'], p['summary'], p['overall'], p['identity'].get('claimed_months'), p['chronology']['calendar_months_unique'],
                    p['chronology']['relevant_months'], p['chronology']['supported_relevant_months'], ', '.join(map(str,p['chronology']['uncertain_entries'])),
                    p['chronology']['method'], '\n'.join(p['findings']), p.get('certificate_limitation','')] for p in data['people']],
                  [12,24,60,30,14,16,16,16,20,60,50,40])
+    page_rows = [[row['document_id'], row['first_page'], row['last_page'], row['kind']]
+                 for row in data.get('page_classification', [])]
+    detail_sheet(book, 'Klasifikasi Halaman', ['Dokumen', 'Halaman awal', 'Halaman akhir', 'Jenis'],
+                 page_rows, [18,16,16,22])
     sources = [[s['id'], s['tool'], s['purpose'], '\n'.join(s['urls'] or []), s['checked_at'], s['evidence_kind'], s['success']] for s in data['sources']]
     detail_sheet(book, 'Sumber Web', ['Receipt', 'Tool', 'Tujuan', 'URL', 'Diperiksa', 'Jenis bukti', 'Tool berhasil'], sources, [25,22,16,65,28,20,16])
-    metadata = [['Run', data['run_id']], ['Snapshot SHA256', data['snapshot_sha256']], ['Tanggal acuan', data['assessment_date']],
+    metadata = [['Run', data['run_id']], ['Snapshot SHA256', data['snapshot_sha256']],
+                ['Schema review', data.get('schema_version')], ['Schema evaluasi', data.get('evaluation', {}).get('schema_version')],
+                ['Kriteria audit terdaftar', data.get('evaluation', {}).get('criteria_count')], ['Tanggal acuan', data['assessment_date']],
                 ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')], ['Provenance KAK', data['kak']['status']],
                 ['Analisis KAK', data['kak']['analysis']], ['Batas pemeriksaan', 'Bantuan review dokumen, bukan keputusan penerimaan personel.'],
                 *[['Keterbatasan', x] for x in data['limitations']],
