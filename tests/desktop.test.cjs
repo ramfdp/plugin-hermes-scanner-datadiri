@@ -142,7 +142,7 @@ test('non-scanner drafts are preserved and prompt treats source text as untruste
   const h = harness(); const draft = { text: 'hello' }; assert.equal(h.command(draft), draft)
   const prompt = h.api.scannerPrompt({ project: 'Test', documents: [] })
   assert.match(prompt, /tidak tepercaya/); assert.match(prompt, /CAPTCHA/)
-  assert.match(prompt, /Jangan mengklaim semua valid/)
+  assert.match(prompt, /jangan mengklaim semua valid/i)
   assert.match(h.api.localDate(), /^\d{4}-\d{2}-\d{2}$/)
 })
 
