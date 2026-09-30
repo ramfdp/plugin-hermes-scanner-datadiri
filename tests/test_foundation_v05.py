@@ -122,11 +122,13 @@ class FoundationV05Test(unittest.TestCase):
         review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
         snapshot = review.snapshot(storage.run_dir(rid))
         self.assertEqual(snapshot['schema_version'], 2)
-        self.assertEqual(snapshot['evaluation']['schema_version'], 3)
+        self.assertEqual(snapshot['evaluation']['schema_version'], 4)
         self.assertEqual(snapshot['evaluation']['criteria_count'], 15)
-        self.assertEqual([c['code'] for c in snapshot['people'][0]['audit_checks']], ['project_period_accuracy', 'identity_consistency', 'project_overlap', 'project_duplicate'])
-        self.assertEqual(snapshot['people'][0]['audit_checks'][0]['status'], 'perlu_klarifikasi')
-        self.assertIsNone(snapshot['people'][0]['audit_checks'][2]['status'])
+        checks = {c['code']: c for c in snapshot['people'][0]['audit_checks']}
+        self.assertEqual(len(checks), 12)
+        self.assertEqual(checks['project_period_accuracy']['status'], 'perlu_klarifikasi')
+        self.assertIsNone(checks['project_overlap']['status'])
+        self.assertIsNone(checks['education_major_match']['status'])
         self.assertEqual(snapshot['page_classification'][2]['kind'], 'kak')
 
     def test_experience_rows_receive_snapshot_local_ids(self):
