@@ -96,7 +96,7 @@ test('KAK and every manual metadata field are absent and cannot block a single P
   assert.equal(data.expected_person_count, null)
   assert.equal(data.allow_web, true)
   assert.match(h.calls.at(-1).args.text, /requirements=\[\]/)
-  assert.match(h.calls.at(-1).args.text, /TANPA meminta.*KAK/)
+  assert.match(h.calls.at(-1).args.text, /Jika KAK tidak ada, requirements=\[\]/)
 })
 
 test('empty non-PDF and oversized files are rejected before session creation', async () => {
