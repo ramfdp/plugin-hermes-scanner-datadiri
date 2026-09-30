@@ -69,6 +69,7 @@ def _same(field, left, right):
 def evaluate_cv_supporting_documents(identity, history, education_records, certificates):
     details, conflicts, missing = [], [], []
     all_refs = []
+    comparable_count = 0
 
     # Employment/project claims versus structured facts extracted from attachments.
     for job in history:
@@ -83,6 +84,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             claimed = job.get(field)
             if not isinstance(claimed, str) or not claimed.strip():
                 continue
+            comparable_count += 1
             supported_values = [
                 fact.get(field) for fact in facts
                 if isinstance(fact.get(field), str) and fact.get(field).strip()
@@ -123,6 +125,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
         for field, value in core:
             if not isinstance(value, str) or not value.strip():
                 continue
+            comparable_count += 1
             canonical = canonical_text(value)
             cv_match = canonical in source_text or canonical in identity_education
             support_match = canonical in support_text if supporting_refs else False
@@ -156,6 +159,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
     summary = canonical_text(identity.get("certificate_summary", ""))
     all_refs.extend(_refs_from_certificates(certificates))
     if summary:
+        comparable_count += 1
         if not certificates:
             item = {"field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
                     "status": "missing_support"}
@@ -185,6 +189,18 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                 details.append({"type": "certificate", "fields": [item]})
 
     refs = _unique_refs(all_refs)
+    if comparable_count == 0:
+        return {
+            "details": details, "conflicts": conflicts, "missing": missing,
+            "check": {
+                "code": "cv_supporting_document_match",
+                "applicable": False,
+                "status": None,
+                "finding": "Tidak ada klaim terstruktur yang dapat dicross-check terhadap dokumen pendukung.",
+                "analysis": "Pemeriksaan tidak diterapkan karena tidak ada field CV/riwayat/pendidikan/sertifikat yang dapat dibandingkan.",
+                "source_refs": [], "kak_refs": [], "computed": True,
+            },
+        }
     if conflicts or missing:
         status = "perlu_klarifikasi"
         finding = (f"Cross-check CV vs dokumen pendukung menemukan {len(conflicts)} konflik "
@@ -299,6 +315,21 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
         item["id"] = f"A{index:03d}"
 
     all_refs = _unique_refs(refs)
+    fallback_refs = _unique_refs([
+        *_refs_from_history(person.get("employment_history", [])),
+        *_refs_from_education(person.get("education_records", [])),
+        *_refs_from_certificates(person.get("certificates", [])),
+    ])
+    if not anomalies and not fallback_refs:
+        return {
+            "items": [],
+            "check": {
+                "code": "data_anomaly", "applicable": False, "status": None,
+                "finding": "Tidak ada data terstruktur yang cukup untuk menjalankan anomaly engine.",
+                "analysis": "Pemeriksaan anomali tidak diterapkan pada personel tanpa data terstruktur.",
+                "source_refs": [], "kak_refs": [], "computed": True,
+            },
+        }
     if anomalies:
         material = sum(1 for item in anomalies if item["material"])
         finding = f"Ditemukan {len(anomalies)} anomali/isu data; {material} dikategorikan material untuk klarifikasi."
@@ -315,11 +346,7 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
         "status": status,
         "finding": finding,
         "analysis": "Anomali dikompilasi dari periode, konsistensi, overlap, duplikasi, cross-check dokumen, dan perbedaan klaim durasi.",
-        "source_refs": all_refs or _unique_refs([
-            *_refs_from_history(person.get("employment_history", [])),
-            *_refs_from_education(person.get("education_records", [])),
-            *_refs_from_certificates(person.get("certificates", [])),
-        ]),
+        "source_refs": all_refs or fallback_refs,
         "kak_refs": [],
         "computed": True,
     }
