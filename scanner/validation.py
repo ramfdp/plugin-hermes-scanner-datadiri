@@ -476,7 +476,7 @@ def validate_person(root, manifest, plan, payload):
             if receipt['success'] and receipt['evidence_kind'] == 'page' and normalized(employer['employer']) in normalized(receipt['content']):
                 employer['status'] = 'nama_ditemukan_pada_sumber_bukan_bukti_hubungan_kerja'
 
-    audit_checks = finalize_person_review(person, plan['requirements'], plan['kak'], audit_checks, checks)
+    audit_checks = finalize_person_review(person, list(applicable_requirements.values()), plan['kak'], audit_checks, checks)
     for check in audit_checks:
         require_evidence = check.get('applicable', True) and check.get('status') in {'memenuhi', 'tidak_memenuhi'}
         source_refs(root, manifest, check.get('source_refs', []), required=require_evidence)
