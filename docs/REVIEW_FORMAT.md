@@ -155,18 +155,57 @@ Tampilkan ringkasan faktual + `chat_markdown` dari tool, hanya XLSX/PDF. Jangan 
 Bukti source_refs untuk CV/lampiran harus berasal dari halaman milik personel pada coverage. Nomor, pemegang, skema dan penerbit sertifikat harus muncul pada kutipan dokumen yang dipetakan. Teks web sertifikat maksimal 2.000 karakter dari record yang sama. Hitungan bulan kalender mengecualikan bulan penilaian yang belum selesai dan semua bulan setelahnya.
 
 
-### audit_checks v2
+### audit contract v4 / KAK matching 0.6.0
 
-Foundation 0.5 mendaftarkan 15 kode audit di `scanner/evaluation.py`. Field
-`audit_checks` pada personel opsional selama evaluator revisi 1-15 belum
-diaktifkan. Jika sebuah check dikirim, `code` harus berasal dari katalog,
-`applicable` adalah boolean, dan status yang diizinkan hanya
-`memenuhi`, `tidak_memenuhi`, atau `perlu_klarifikasi`.
-Status `perlu_klarifikasi` wajib memiliki klarifikasi. Bukti kandidat memakai
-`source_refs`; bukti KAK memakai `kak_refs` yang harus menunjuk halaman
-berklasifikasi `kak` atau `addendum`. Foundation tidak menghitung kesimpulan
-akhir 15 poin sampai evaluator masing-masing revisi diimplementasikan.
+Katalog tetap memiliki 15 audit. Backend sekarang mengelola #1-#12; payload
+`audit_checks` tidak boleh mengirim kode tersebut. #13/#14/#15 belum diaktifkan
+pada batch ini.
 
-### supporting_facts dan audit server-side 0.5.1
+Requirement KAK baru dapat memakai `audit_code` berikut:
+`position_experience_match`, `project_kak_match`, `organization_role_match`,
+`experience_duration_match`, `responsibility_position_match`,
+`education_major_match`, `certificate_kak_validity`, atau
+`technical_competency_match`. Requirement harus atomik dan tetap mempunyai
+`source_refs` KAK. Requirement tanpa `audit_code` tetap kompatibel melalui
+`checks` legacy.
 
-`supporting_facts` hanya diisi dari dokumen CV/lampiran yang benar-benar menyebut nilai proyek, perusahaan, jabatan, tanggal mulai atau tanggal akhir. Field yang tidak tertulis dibiarkan kosong, bukan ditebak. Setiap record wajib memiliki `source_refs`. Backend menghitung #4, #9, #10 dan #11; payload yang mencoba mengirim code `project_period_accuracy`, `identity_consistency`, `project_overlap`, atau `project_duplicate` ditolak. Tanggal `YYYY` tetap dianggap presisi tahun dan tidak diubah menjadi durasi bulan; `YYYY-MM` dan `YYYY-MM-DD` dapat dibandingkan pada rentang kalender yang sesuai presisinya.
+Contoh requirement deterministik:
+```json
+{"id":"R7","role":"Engineer","kind":"education",
+ "audit_code":"education_major_match","text":"Pendidikan minimal S1 Teknik Sipil",
+ "minimum_months":null,
+ "parameters":{"minimum_level":"S1","accepted_majors":["Teknik Sipil"]},
+ "source_refs":[{"document_id":"D001","page":20,"quote":"Pendidikan minimal S1 Teknik Sipil"}]}
+```
+#5 wajib memakai `minimum_months`. #8 memakai `parameters.schemes`,
+`levels`, `issuers`, dan `require_current`. Nilai teks parameter harus
+muncul pada kutipan KAK; backend menolak parameter hasil tebakan.
+
+Untuk #1/#2/#3/#6/#12, `save_person` mengirim tepat satu
+`semantic_assessments` per requirement yang berlaku:
+```json
+{"requirement_id":"R1","status":"memenuhi",
+ "finding":"Pengalaman Site Engineer mendukung posisi yang diusulkan.",
+ "analysis":"E001 memuat jabatan dan tugas yang relevan terhadap requirement.",
+ "experience_ids":["E001"],
+ "source_refs":[{"document_id":"D001","page":2,"quote":"Site Engineer"}]}
+```
+Bukti KAK tidak dikirim ulang oleh model; backend mengambil `kak_refs` dari
+requirement yang tervalidasi. Status `memenuhi` wajib menunjuk minimal satu
+Experience ID. Semua assessment semantic harus tercakup tepat sekali.
+
+`education_records` memuat `level`, `degree`, `major`, `institution`,
+`source_refs`, dan `supporting_refs`. Nilai terstruktur wajib benar-benar
+muncul pada kutipan CV/ijazah. `supporting_facts` juga diverifikasi dengan
+aturan yang sama dan dapat memuat proyek, perusahaan, jabatan, pemberi kerja,
+konsultan, kontraktor, instansi yang diwakili, serta periode.
+
+Backend menghitung:
+- #4 periode, #9 konsistensi, #10 overlap, #11 duplikasi;
+- #5 durasi dari union bulan pengalaman relevan (overlap dihitung sekali);
+- #7 jenjang pendidikan secara deterministik dan jurusan exact; ekuivalensi
+  jurusan yang tidak exact menjadi `perlu_klarifikasi`;
+- #8 kecocokan sertifikat terstruktur serta masa berlaku pada tanggal acuan.
+
+Tanggal `YYYY` tetap tidak diubah menjadi bulan tebakan; `YYYY-MM` dan
+`YYYY-MM-DD` dapat dibandingkan sesuai presisinya.
