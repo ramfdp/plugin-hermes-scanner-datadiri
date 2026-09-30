@@ -5,21 +5,8 @@ but the backend validates coverage and aggregates them. Duration, education and
 certificate checks are computed locally from structured data.
 """
 import copy
-from .evaluation import AUDIT_CRITERIA, canonical_text
-
-SEMANTIC_MATCH_CODES = {
-    "position_experience_match",
-    "project_kak_match",
-    "organization_role_match",
-    "responsibility_position_match",
-    "technical_competency_match",
-}
-DETERMINISTIC_MATCH_CODES = {
-    "experience_duration_match",
-    "education_major_match",
-    "certificate_kak_validity",
-}
-KAK_MATCH_CODES = SEMANTIC_MATCH_CODES | DETERMINISTIC_MATCH_CODES
+from .evaluation import (AUDIT_CRITERIA, DETERMINISTIC_MATCH_CODES, KAK_MATCH_CODES,
+                         SEMANTIC_MATCH_CODES, canonical_text)
 LEVEL_RANK = {
     "sma": 1, "smk": 1,
     "d1": 2, "d2": 3, "d3": 4,
