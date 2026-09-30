@@ -38,7 +38,7 @@ class KakMatchingV060Test(unittest.TestCase):
             'Personel KAK\nS1 Teknik Sipil\nSite Engineer\nProyek Jembatan Sungai\n'
             'Konsultan: PT Konsultan A | Pemberi Kerja: Dinas PU\n'
             'Kontraktor: PT Kontraktor A\nPengawasan struktur jembatan\n2020-01 sampai 2021-12',
-            'IJAZAH\nPersonel KAK\nIjazah S1 Teknik Sipil\nUniversitas Contoh',
+            'IJAZAH\nPersonel KAK\nIjazah S1 Teknik Sipil\nSarjana Teknik\nUniversitas Contoh',
             'CERT-001 Personel KAK Ahli Teknik Jembatan BNSP Level 7',
             'KAK POSISI ENGINEER\n'
             'Posisi Engineer membutuhkan pengalaman sebagai Site Engineer\n'
