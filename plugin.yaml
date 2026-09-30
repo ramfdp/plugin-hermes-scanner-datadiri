@@ -1,6 +1,6 @@
 name: hermes-scanner-datadiri
-version: 0.5.1
-description: Single-PDF GPU OCR with deterministic period consistency overlap and duplicate audits
+version: 0.6.0
+description: Single-PDF GPU OCR with structured KAK matching and evidence-backed audits
 provides_tools:
   - scan_document_ocr
   - export_document
