@@ -6,7 +6,7 @@
 memanggil tool web. Ini adalah kegagalan kontrak pemanggilan, bukan bukti situs
 BNSP/PU atau jaringan sedang bermasalah.
 
-Pada workflow 0.4.4, `__init__.py` mendaftarkan factory dari
+Sejak workflow 0.4.4 dan tetap pada 0.5.0, `__init__.py` mendaftarkan factory dari
 `scanner.live_tools.ordered_web_handler(ctx)`. Factory tersebut membungkus
 `scanner.tools.ordered_web_handler(ctx)`. Keduanya menghasilkan `async def`.
 
@@ -33,7 +33,7 @@ berlaku pada tool tanpa metadata registrasi ini.
 
 Tidak ada perubahan versi protokol/workflow, UI satu PDF, progres, CUDA,
 dependensi, portal, izin web, batas privasi, receipt, atau urutan Excel -> web ->
-PDF. Versi workflow tetap 0.4.4; perbaikan ini dikenali dari commit dan hasil
+PDF. Perbaikan async berasal dari 0.4.4 dan tetap dipertahankan pada 0.5.0; perbaikan ini dikenali dari commit dan hasil
 perbandingan file instalasi, bukan judul popup baru.
 
 ## Pengujian
