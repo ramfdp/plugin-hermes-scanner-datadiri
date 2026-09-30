@@ -243,14 +243,17 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
 
     period = fact_analysis.get("period", {})
     for item in period.get("issues", []):
-        exp = item.get("experience_id")
-        add(
-            "period_" + item.get("type", "issue"),
-            item.get("detail") or f"Isu periode pada {exp}.",
-            experience_ids=[exp] if exp else [],
-            field=item.get("field"),
-            source_refs=_refs_from_history([job for job in person.get("employment_history", []) if job.get("id") == exp]),
-        )
+        if isinstance(item, dict):
+            exp = item.get("experience_id")
+            add(
+                "period_" + item.get("type", "issue"),
+                item.get("detail") or f"Isu periode pada {exp}.",
+                experience_ids=[exp] if exp else [],
+                field=item.get("field"),
+                source_refs=_refs_from_history([job for job in person.get("employment_history", []) if job.get("id") == exp]),
+            )
+        else:
+            add("period_issue", str(item), material=False)
 
     consistency = fact_analysis.get("consistency", {})
     for item in consistency.get("conflicts", []):
@@ -261,6 +264,21 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
             experience_ids=[exp] if exp else [],
             field=item.get("field"),
             source_refs=_refs_from_history([job for job in person.get("employment_history", []) if job.get("id") == exp]),
+        )
+    for item in consistency.get("missing", []):
+        if isinstance(item, dict):
+            exp = item.get("experience_id")
+            field = item.get("field")
+            detail = f"{exp} field {field} belum dapat dicross-check."
+        else:
+            exp, field = None, str(item)
+            detail = f"{field} belum tersedia untuk pemeriksaan konsistensi."
+        add(
+            "consistency_missing", detail,
+            experience_ids=[exp] if exp else [],
+            field=field,
+            source_refs=_refs_from_history([job for job in person.get("employment_history", []) if not exp or job.get("id") == exp]),
+            material=False,
         )
 
     for pair in fact_analysis.get("overlaps", {}).get("pairs", []):
