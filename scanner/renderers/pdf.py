@@ -116,10 +116,10 @@ def render(data, path):
         if cross.get('details'):
             add('Cross-check CV vs dokumen pendukung', heading)
         for detail in cross.get('details', []):
-            title = detail.get('type', 'dokumen')
+            detail_title = detail.get('type', 'dokumen')
             if detail.get('experience_id'):
-                title += f" | {detail['experience_id']}"
-            add(title, sub)
+                detail_title += f" | {detail['experience_id']}"
+            add(detail_title, sub)
             for item in detail.get('fields', []):
                 support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
                 field('Field:', item.get('field', ''))
