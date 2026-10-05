@@ -192,13 +192,15 @@ class FactEngineV051Test(unittest.TestCase):
         self.assertTrue(exported['success'], exported)
         book = load_workbook(exported['artifacts'][0]['path'], read_only=True, data_only=True)
         try:
-            self.assertIn('Audit Fakta', book.sheetnames)
-            self.assertIn('Overlap Duplikasi', book.sheetnames)
-            audit = book['Audit Fakta']
-            values = [audit.cell(row, 3).value for row in range(2, audit.max_row + 1)]
-            self.assertIn('project_overlap', values)
-            pairs = book['Overlap Duplikasi']
-            self.assertEqual(pairs['C2'].value, 'overlap')
+            self.assertIn('Hasil Pemeriksaan', book.sheetnames)
+            self.assertIn('Periode dan Pencatatan Ganda', book.sheetnames)
+            audit = book['Hasil Pemeriksaan']
+            values = [audit.cell(row, 4).value for row in range(2, audit.max_row + 1)]
+            self.assertIn('Pengalaman dengan periode bersamaan', values)
+            self.assertNotIn('project_overlap', values)
+            pairs = book['Periode dan Pencatatan Ganda']
+            self.assertEqual(pairs['D2'].value, 'Periode bersamaan')
+            self.assertIn('Project Alpha', pairs['E2'].value)
         finally:
             book.close()
 

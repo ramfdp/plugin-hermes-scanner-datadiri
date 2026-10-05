@@ -233,16 +233,17 @@ class KakMatchingV060Test(unittest.TestCase):
         self.assertTrue(result['success'], result)
         book = load_workbook(result['artifacts'][0]['path'], read_only=True, data_only=True)
         try:
-            self.assertIn('Detail Matching KAK', book.sheetnames)
+            self.assertIn('Pemeriksaan KAK Terperinci', book.sheetnames)
             self.assertIn('Pendidikan', book.sheetnames)
-            detail = book['Detail Matching KAK']
+            detail = book['Pemeriksaan KAK Terperinci']
             self.assertEqual(detail.max_row, 9)
-            codes = {detail.cell(row, 4).value for row in range(2, detail.max_row + 1)}
-            self.assertIn('technical_competency_match', codes)
+            labels = {detail.cell(row, 4).value for row in range(2, detail.max_row + 1)}
+            self.assertIn('Kesesuaian kompetensi teknis', labels)
+            self.assertNotIn('technical_competency_match', labels)
             education = book['Pendidikan']
-            self.assertEqual(education['C2'].value, 'S1')
+            self.assertEqual(education['D2'].value, 'S1')
             history = book['Riwayat Pekerjaan']
-            self.assertEqual(history['F2'].value, 'Dinas PU')
+            self.assertEqual(history['G2'].value, 'Dinas PU')
         finally:
             book.close()
 

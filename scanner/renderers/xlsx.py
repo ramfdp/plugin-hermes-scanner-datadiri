@@ -1,28 +1,11 @@
-"""Review workbook: personnel overview, KAK checks and deterministic fact audits."""
+"""BD workbook. Internal codes remain in review.json, not in visible cells."""
 from ..exporter import personnel_workbook, detail_sheet, data_cell
+from ..report_presenter import ReportPresenter
 from ..web import normalized
 
 
-def refs(values):
-    return '\n'.join(f"{r['document_id']} h.{r['page']}: {r['quote']}" for r in values)
-
-
-def supporting_facts(values):
-    lines = []
-    for fact in values or []:
-        fields = []
-        for key, label in (('project', 'proyek'), ('employer', 'perusahaan'), ('role', 'jabatan'),
-                           ('client', 'pemberi kerja'), ('consultant', 'konsultan'),
-                           ('contractor', 'kontraktor'), ('represented_organization', 'instansi'),
-                           ('start_date', 'mulai'), ('end_date', 'selesai')):
-            if fact.get(key):
-                fields.append(f"{label}={fact[key]}")
-        source = refs(fact.get('source_refs', []))
-        lines.append(' | '.join(fields + ([source] if source else [])))
-    return '\n'.join(lines)
-
-
 def render(data, path):
+    present = ReportPresenter(data)
     people = []
     for person in data['people']:
         identity = person['identity']
@@ -34,125 +17,125 @@ def render(data, path):
                        'sertifikat_keahlian': identity.get('certificate_summary', 'Lihat Verifikasi Sertifikat'),
                        'pengalaman_min_kak_tahun': minimum, 'pengalaman_kerja_bulan': identity.get('claimed_months')})
     book = personnel_workbook({'judul': 'DAFTAR TENAGA AHLI', 'wilayah': data['project'],
-                               'pekerjaan': f"Acuan {data['assessment_date']} | Pengalaman ringkasan = klaim CV, bukan pengalaman tervalidasi", 'personel': people})
-    book.active.title = 'Ringkasan Personel'
-    for i, person in enumerate(data['people'], 6):
-        if not any(r['kind'] == 'experience' and r.get('minimum_months') is not None and normalized(r['role']) in ('*', normalized(person['role'])) for r in data['requirements']):
-            data_cell(book.active, i, 7, 'Belum tersedia')
-
-    checks = [[p['id'], p['name'], p['role'], c['requirement_id'], c['requirement'], c['finding'], c['analysis'],
-               c['status'], refs(c.get('source_refs', [])), c.get('clarification', '')] for p in data['people'] for c in p['checks']]
-    detail_sheet(book, 'Pemeriksaan KAK', ['ID', 'Personel', 'Posisi', 'Kriteria', 'Persyaratan', 'Temuan', 'Analisis', 'Status', 'Bukti', 'Klarifikasi'],
-                 checks, [12,24,24,12,40,40,55,25,50,40])
-
-    criteria = {item['code']: item['label'] for item in data.get('evaluation', {}).get('criteria', [])}
-    audit_rows = [[p['id'], p['name'], c['code'], criteria.get(c['code'], c['code']), c.get('applicable'),
-                   c.get('status') or 'tidak berlaku', c.get('finding', ''), c.get('analysis', ''),
-                   c.get('clarification', ''), refs(c.get('source_refs', []))]
-                  for p in data['people'] for c in p.get('audit_checks', [])]
-    detail_sheet(book, 'Audit Fakta', ['ID', 'Personel', 'Kode', 'Pemeriksaan', 'Berlaku', 'Status', 'Temuan',
-                 'Analisis', 'Klarifikasi', 'Bukti'], audit_rows, [12,24,28,48,12,22,48,65,48,55])
-
-    cross_rows = []
-    for person in data['people']:
-        for detail in person.get('document_cross_check', {}).get('details', []):
-            for item in detail.get('fields', []):
-                support = item.get('support_value', '')
-                if not support and item.get('support_values'):
-                    support = ' | '.join(map(str, item['support_values']))
-                cross_rows.append([
-                    person['id'], person['name'], detail.get('type', ''), detail.get('experience_id', ''),
-                    detail.get('record', ''), item.get('field', ''), item.get('cv_value', ''),
-                    support, item.get('status', ''),
-                ])
-    detail_sheet(book, 'Cross Check Dokumen', ['ID', 'Personel', 'Jenis', 'Experience ID', 'Record',
-                 'Field', 'Nilai CV', 'Nilai Pendukung', 'Status'],
-                 cross_rows, [12,24,18,16,12,24,42,42,24])
-
-    anomaly_rows = [[p['id'], p['name'], a.get('id', ''), a.get('code', ''), a.get('material'),
-                     ', '.join(a.get('experience_ids', [])), a.get('field', ''), a.get('detail', ''),
-                     refs(a.get('source_refs', []))]
-                    for p in data['people'] for a in p.get('anomalies', [])]
-    detail_sheet(book, 'Anomali', ['ID', 'Personel', 'Anomali ID', 'Kode', 'Material', 'Experience ID',
-                 'Field', 'Detail', 'Bukti'], anomaly_rows, [12,24,16,30,12,20,22,70,55])
-
-    match_rows = [[p['id'], p['name'], item.get('requirement_id', ''), item.get('code', ''),
-                   item.get('status', ''), ', '.join(item.get('experience_ids', [])),
-                   item.get('requirement_text', ''), item.get('finding', ''), item.get('analysis', ''),
-                   item.get('clarification', ''), refs(item.get('source_refs', [])), refs(item.get('kak_refs', [])),
-                   'backend' if item.get('computed') else 'semantic']
-                  for p in data['people'] for item in p.get('kak_match_details', [])]
-    detail_sheet(book, 'Detail Matching KAK', ['ID', 'Personel', 'Requirement', 'Kode Audit', 'Status',
-                 'Experience ID', 'Persyaratan KAK', 'Temuan', 'Analisis', 'Klarifikasi',
-                 'Bukti Kandidat', 'Bukti KAK', 'Sumber Penilaian'],
-                 match_rows, [12,24,18,30,22,22,48,48,65,48,55,55,18])
-
-    education_rows = [[p['id'], p['name'], e.get('level', ''), e.get('degree', ''), e.get('major', ''),
-                       e.get('institution', ''), refs(e.get('source_refs', [])), refs(e.get('supporting_refs', []))]
-                      for p in data['people'] for e in p.get('education_records', [])]
-    detail_sheet(book, 'Pendidikan', ['ID', 'Personel', 'Jenjang', 'Gelar', 'Jurusan', 'Institusi',
-                 'Bukti', 'Bukti Pendukung'], education_rows, [12,24,16,24,32,36,55,55])
-
-    certificates = [[p['id'], p['name'], c.get('number', ''), c.get('holder', ''), c.get('issuer', ''), c.get('scheme', ''),
-                     c.get('level', ''), c.get('issued_on', ''), c.get('expires_on', ''), c['status'], c['validity'],
-                     c['analysis'], c['reason'], c.get('receipt_id', ''), c.get('checked_at', ''), refs(c['source_refs'])]
-                    for p in data['people'] for c in p['certificates']]
-    detail_sheet(book, 'Verifikasi Sertifikat', ['ID', 'Personel', 'Nomor', 'Pemegang', 'Penerbit', 'Skema', 'Jenjang', 'Terbit', 'Berlaku sampai',
-                 'Verifikasi identitas', 'Tanggal dokumen', 'Analisis', 'Batas verifikasi', 'Receipt', 'Diperiksa', 'Bukti'], certificates)
-
-    history = [[p['id'], p['name'], h.get('id', ''), h['employer'], h.get('role', ''),
-                h.get('client', ''), h.get('consultant', ''), h.get('contractor', ''), h.get('represented_organization', ''),
-                h.get('start_date', ''), h.get('end_date', ''), h.get('relevant'), h.get('project', ''),
-                h.get('responsibilities', ''), refs(h.get('source_refs', [])),
-                refs(h.get('supporting_refs', [])), supporting_facts(h.get('supporting_facts', []))]
-               for p in data['people'] for h in p['employment_history']]
-    detail_sheet(book, 'Riwayat Pekerjaan', ['ID', 'Personel', 'Experience ID', 'Perusahaan', 'Jabatan',
-                 'Pemberi Kerja', 'Konsultan', 'Kontraktor', 'Instansi Diwakili',
-                 'Mulai asli', 'Selesai asli', 'Relevan', 'Proyek', 'Tanggung jawab', 'CV', 'Lampiran', 'Fakta Pendukung'],
-                 history, [12,24,16,28,24,28,28,28,30,16,16,12,36,50,50,50,70])
-
-    pair_rows = []
-    for person in data['people']:
-        facts = person.get('fact_analysis', {})
-        for pair in facts.get('overlaps', {}).get('pairs', []):
-            pair_rows.append([person['id'], person['name'], 'overlap', pair['left_id'], pair['right_id'],
-                              pair.get('overlap_start', ''), pair.get('overlap_end', ''), pair.get('calendar_days', ''),
-                              pair.get('precision', ''), ''])
-        for pair in facts.get('duplicates', {}).get('pairs', []):
-            pair_rows.append([person['id'], person['name'], 'duplicate_' + pair.get('type', ''), pair['left_id'], pair['right_id'],
-                              '', '', '', '', pair.get('project_similarity', '')])
-    detail_sheet(book, 'Overlap Duplikasi', ['ID', 'Personel', 'Jenis', 'Experience A', 'Experience B',
-                 'Mulai overlap', 'Akhir overlap', 'Hari kalender', 'Presisi', 'Kemiripan judul'],
-                 pair_rows, [12,24,22,16,16,18,18,16,32,18])
-
-    detail_sheet(book, 'Ringkasan Review', ['ID', 'Personel', 'Ringkasan analisis', 'Kesimpulan KAK',
-                 'Status final internal', 'Status legacy', 'Bulan klaim', 'Bulan kalender unik',
-                 'Bulan relevan', 'Bulan relevan didukung', 'Periode tak dihitung', 'Metode', 'Temuan', 'Keterbatasan sertifikat'],
-                 [[p['id'], p['name'], p['summary'], p.get('final_conclusion', {}).get('label', 'Perlu Klarifikasi'),
-                   p.get('final_conclusion', {}).get('status', 'perlu_klarifikasi'), p['overall'],
-                   p['identity'].get('claimed_months'), p['chronology']['calendar_months_unique'],
-                   p['chronology']['relevant_months'], p['chronology']['supported_relevant_months'],
-                   ', '.join(map(str,p['chronology']['uncertain_entries'])),
-                   p['chronology']['method'], '\n'.join(p['findings']), p.get('certificate_limitation','')] for p in data['people']],
-                 [12,24,60,24,24,30,14,16,16,16,20,60,50,40])
-
-    page_rows = [[row['document_id'], row['first_page'], row['last_page'], row['kind']]
-                 for row in data.get('page_classification', [])]
-    detail_sheet(book, 'Klasifikasi Halaman', ['Dokumen', 'Halaman awal', 'Halaman akhir', 'Jenis'],
-                 page_rows, [18,16,16,22])
-    sources = [[s['id'], s['tool'], s['purpose'], '\n'.join(s['urls'] or []), s['checked_at'], s['evidence_kind'], s['success']] for s in data['sources']]
-    detail_sheet(book, 'Sumber Web', ['Receipt', 'Tool', 'Tujuan', 'URL', 'Diperiksa', 'Jenis bukti', 'Tool berhasil'], sources, [25,22,16,65,28,20,16])
-    metadata = [['Run', data['run_id']], ['Snapshot SHA256', data['snapshot_sha256']],
-                ['Schema review', data.get('schema_version')], ['Schema evaluasi', data.get('evaluation', {}).get('schema_version')],
-                ['Kriteria audit terdaftar', data.get('evaluation', {}).get('criteria_count')],
-                ['Audit #1-#15 aktif', ', '.join(data.get('evaluation', {}).get('implemented_codes', []))],
-                ['Tanggal acuan', data['assessment_date']],
-                ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')], ['Provenance KAK', data['kak']['status']],
-                ['Analisis KAK', data['kak']['analysis']], ['Batas pemeriksaan', 'Bantuan review dokumen, bukan keputusan penerimaan personel.'],
-                *[['Keterbatasan', x] for x in data['limitations']],
-                *[[f"Dokumen {d['id']}", f"{d['kind']} | {d['name']} | SHA256 {d['sha256']}"] for d in data['documents']]]
-    detail_sheet(book, 'Info Pemeriksaan', ['Item', 'Keterangan'], metadata, [26,110])
+                               'pekerjaan': f"Acuan {data['assessment_date']} | Pengalaman ringkasan = keterangan CV, bukan pengalaman tervalidasi", 'personel': people})
     try:
+        book.active.title = 'Ringkasan Personel'
+        for i, person in enumerate(data['people'], 6):
+            if not any(r['kind'] == 'experience' and r.get('minimum_months') is not None and normalized(r['role']) in ('*', normalized(person['role'])) for r in data['requirements']):
+                data_cell(book.active, i, 7, 'Belum tersedia')
+
+        summary_rows, check_rows, audit_rows, cross_rows, anomaly_rows, match_rows = [], [], [], [], [], []
+        education_rows, certificates, history, pair_rows = [], [], [], []
+        for number, person in enumerate(data['people'], 1):
+            who = [number, person['name'], person['role']]
+            explain = lambda value: present.narrative(value, person)
+            chronology = person['chronology']
+            final = person.get('final_conclusion', {})
+            summary_rows.append([*who, present.status(final.get('status', 'perlu_klarifikasi')),
+                                 explain(person['summary']), explain(final.get('finding', '')),
+                                 person['identity'].get('claimed_months'), chronology['calendar_months_unique'],
+                                 chronology['relevant_months'], chronology['supported_relevant_months'],
+                                 len(chronology['uncertain_entries']), present.uncertain_experiences(person), explain(chronology['method']),
+                                 '\n'.join(explain(x) for x in person['findings']), explain(person.get('certificate_limitation', ''))])
+            for check in person['checks']:
+                view = present.check(check, person)
+                check_rows.append([*who, check['requirement'], view['status'], view['finding'], view['analysis'],
+                                   view['clarification'], view['evidence']])
+            for check in person.get('audit_checks', []):
+                view = present.check(check, person)
+                audit_rows.append([*who, view['label'], view['status'], view['finding'], view['analysis'],
+                                   view['clarification'], view['evidence'], view['kak_evidence']])
+            for detail in person.get('document_cross_check', {}).get('details', []):
+                experience = present.experience(person, detail['experience_id']) if detail.get('experience_id') else ''
+                for item in detail.get('fields', []):
+                    support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
+                    cross_rows.append([*who, present.kind(detail.get('type')), experience, detail.get('record', ''),
+                                       present.field(item.get('field')), item.get('cv_value', ''),
+                                       support or 'Belum tersedia untuk informasi ini', present.status(item.get('status'))])
+            for anomaly in person.get('anomalies', []):
+                anomaly_rows.append([*who, present.anomaly_label(anomaly.get('code')), present.flag(anomaly.get('material')),
+                                     present.experiences(person, anomaly.get('experience_ids', [])),
+                                     present.field(anomaly['field']) if anomaly.get('field') else '',
+                                     explain(anomaly.get('detail', '')), present.references(anomaly.get('source_refs', []))])
+            for item in person.get('kak_match_details', []):
+                view = present.check(item, person)
+                match_rows.append([*who, view['label'], item.get('requirement_text', ''), view['status'],
+                                   present.experiences(person, item.get('experience_ids', [])), view['finding'],
+                                   view['analysis'], view['clarification'], view['evidence'], view['kak_evidence']])
+            for education in person.get('education_records', []):
+                education_rows.append([*who, *[education.get(k, '') for k in ('level', 'degree', 'major', 'institution')],
+                                       present.references(education.get('source_refs', [])), present.references(education.get('supporting_refs', []))])
+            for cert in person['certificates']:
+                certificates.append([*who, *[cert.get(k, '') for k in ('number', 'holder', 'issuer', 'scheme', 'level', 'issued_on', 'expires_on')],
+                                     present.status(cert.get('status')), present.status(cert.get('validity')),
+                                     explain(cert.get('analysis', '')), explain(cert.get('reason', '')),
+                                     present.web_source(cert['receipt_id']) if cert.get('receipt_id') else '',
+                                     cert.get('checked_at', ''), present.references(cert.get('source_refs', [])),
+                                     explain(cert.get('validity_basis', ''))])
+            for job in person['employment_history']:
+                history.append([*who, *[job.get(k, '') for k in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',
+                                'represented_organization', 'start_date', 'end_date')], present.flag(job.get('relevant')),
+                                job.get('responsibilities', ''), present.references(job.get('source_refs', [])),
+                                present.references(job.get('supporting_refs', [])), present.supporting_facts(job.get('supporting_facts', []))])
+            facts = person.get('fact_analysis', {})
+            for pair in facts.get('overlaps', {}).get('pairs', []):
+                pair_rows.append([*who, 'Periode bersamaan', present.experience(person, pair['left_id']), present.experience(person, pair['right_id']),
+                                  pair.get('overlap_start', ''), pair.get('overlap_end', ''), pair.get('calendar_days', ''), present.precision(pair.get('precision'))])
+            for pair in facts.get('duplicates', {}).get('pairs', []):
+                pair_rows.append([*who, present.duplicate(pair.get('type')), present.experience(person, pair['left_id']), present.experience(person, pair['right_id']),
+                                  '', '', '', 'Kemiripan nama saja tidak membuktikan pencatatan ganda.'])
+
+        identity_headers = ['No. personel', 'Personel', 'Posisi']
+        identity_widths = [12, 24, 24]
+
+        def sheet(name, headers, rows, widths):
+            return detail_sheet(book, name, identity_headers + headers, rows, identity_widths + widths)
+
+        sheet('Ringkasan Pemeriksaan', ['Kesimpulan KAK', 'Ringkasan', 'Dasar kesimpulan', 'Pengalaman dalam CV (bulan)',
+              'Bulan kalender tanpa hitung ganda', 'Bulan relevan', 'Bulan relevan dengan bukti',
+              'Jumlah periode belum dapat dihitung penuh', 'Periode yang perlu dilengkapi', 'Cara penghitungan', 'Temuan tambahan', 'Batas pemeriksaan sertifikat'],
+              summary_rows, [24,48,48,18,20,18,20,22,48,48,48,48])
+        sheet('Pemeriksaan KAK', ['Persyaratan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti'],
+              check_rows, [48,24,48,48,48,55])
+        sheet('Hasil Pemeriksaan', ['Pemeriksaan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti personel', 'Bukti KAK'],
+              audit_rows, [40,24,48,48,48,55,55])
+        sheet('Pencocokan Dokumen', ['Jenis', 'Pengalaman terkait', 'Urutan pendidikan', 'Informasi yang diperiksa',
+              'Isi CV', 'Isi dokumen pendukung', 'Hasil pencocokan'], cross_rows, [20,48,16,28,42,42,32])
+        sheet('Konfirmasi Data', ['Hal yang perlu diperiksa', 'Ditandai penting untuk klarifikasi', 'Pengalaman terkait',
+              'Informasi yang diperiksa', 'Penjelasan', 'Bukti'], anomaly_rows, [36,20,48,28,55,55])
+        sheet('Pemeriksaan KAK Terperinci', ['Pemeriksaan', 'Persyaratan KAK', 'Hasil', 'Pengalaman terkait',
+              'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti personel', 'Bukti KAK'], match_rows, [40,48,24,48,48,48,48,55,55])
+        sheet('Pendidikan', ['Jenjang', 'Gelar', 'Jurusan', 'Institusi', 'Bukti', 'Bukti pendukung'],
+              education_rows, [16,24,32,36,55,55])
+        sheet('Verifikasi Sertifikat', ['Nomor', 'Pemegang', 'Penerbit', 'Bidang', 'Jenjang', 'Tanggal terbit', 'Tanggal akhir dokumen',
+              'Verifikasi identitas', 'Hasil pemeriksaan tanggal', 'Penjelasan', 'Batas pemeriksaan', 'Sumber daring',
+              'Waktu pemeriksaan', 'Bukti', 'Dasar pemeriksaan tanggal'], certificates,
+              [24,24,24,32,14,18,20,30,36,48,48,22,26,55,48])
+        sheet('Riwayat Pekerjaan', ['Proyek', 'Perusahaan', 'Jabatan dalam proyek', 'Pemberi kerja', 'Konsultan', 'Kontraktor',
+              'Instansi yang diwakili', 'Tanggal mulai', 'Tanggal selesai', 'Relevan', 'Uraian tugas', 'Bukti CV',
+              'Dokumen pendukung', 'Informasi pada dokumen pendukung'], history, [36,28,24,28,28,28,30,18,18,18,48,55,55,60])
+        sheet('Periode dan Pencatatan Ganda', ['Hasil pemeriksaan', 'Pengalaman pertama', 'Pengalaman kedua', 'Mulai bersamaan',
+              'Akhir bersamaan', 'Hari kalender', 'Ketelitian tanggal / catatan'], pair_rows, [30,48,48,18,18,16,48])
+        detail_sheet(book, 'Jenis Dokumen per Halaman', ['Dokumen', 'Halaman awal', 'Halaman akhir', 'Jenis'],
+                     [[present.document(r['document_id']), r['first_page'], r['last_page'], present.kind(r.get('kind'))]
+                      for r in data.get('page_classification', [])], [48,16,16,28])
+        detail_sheet(book, 'Sumber Daring', ['Sumber', 'Alamat situs', 'Waktu pemeriksaan', 'Sumber berhasil diakses'],
+                     [[present.web_source(s['id']), '\n'.join(s.get('urls') or []), s.get('checked_at', ''), present.flag(s.get('success'))]
+                      for s in data['sources']], [24,65,28,24])
+        metadata = [
+            ['Referensi laporan', data['snapshot_sha256'][:16]], ['Proyek', data['project']],
+            ['Tanggal acuan', data['assessment_date']], ['Disusun', data['created_at']],
+            ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')],
+            ['Ketersediaan dan sumber KAK', present.status(data['kak'].get('status'))],
+            ['Penjelasan KAK', present.narrative(data['kak'].get('analysis', ''))],
+            ['Batas pemeriksaan', 'Bantuan pemeriksaan dokumen, bukan keputusan menerima/menolak personel.'],
+            ['Pemeriksaan daring', 'Keberhasilan mengakses situs tidak membuktikan kebenaran seluruh informasi.'],
+            ['Informasi belum didukung', 'Jumlah butir informasi yang belum didukung bukan jumlah dokumen yang harus dilengkapi.'],
+            ['Pemeriksaan tidak diterapkan', 'Tidak berarti KAK pasti tidak mensyaratkannya. Periksa kelengkapan dan keterbacaan KAK.'],
+            *[['Keterbatasan', present.narrative(x)] for x in data['limitations']],
+            *[['Dokumen sumber', f"{present.kind(d.get('kind'))} | {d['name']}"] for d in data['documents']],
+        ]
+        detail_sheet(book, 'Info Pemeriksaan', ['Item', 'Keterangan'], metadata, [32,100])
         book.save(path)
     finally:
         book.close()
