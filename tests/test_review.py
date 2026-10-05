@@ -29,9 +29,16 @@ class ReviewTest(unittest.TestCase):
         xlsx, pdf = [Path(a['path']) for a in result['artifacts']]
         book = load_workbook(xlsx, read_only=True, data_only=True)
         self.assertEqual(book['Ringkasan Personel'].max_row, 7)
-        self.assertEqual(book['Verifikasi Sertifikat']['J2'].value, 'terverifikasi')
-        self.assertEqual(book['Verifikasi Sertifikat']['J3'].value, 'belum_dapat_diverifikasi')
-        self.assertEqual(book['Info Pemeriksaan']['B3'].value, result['snapshot_sha256'])
+        cert_sheet = book['Verifikasi Sertifikat']
+        headers = {cell.value: cell.column for cell in cert_sheet[1]}
+        self.assertEqual(cert_sheet.cell(2, headers['Verifikasi identitas']).value, 'Terverifikasi')
+        self.assertEqual(cert_sheet.cell(3, headers['Verifikasi identitas']).value, 'Belum dapat diverifikasi')
+        metadata = dict(book['Info Pemeriksaan'].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(metadata['Referensi laporan'], result['snapshot_sha256'][:16])
+        # The presentation must not rewrite the saved evidence/evaluation snapshot.
+        self.assertEqual(storage.digest(xlsx.parent / 'review.json'), result['snapshot_sha256'])
+        saved = storage.load(xlsx.parent / 'review.json')
+        self.assertIn('project_duplicate', {c['code'] for c in saved['people'][0]['audit_checks']})
         book.close()
         import pypdfium2 as pdfium
         with pdfium.PdfDocument(str(pdf)) as document:

@@ -281,15 +281,15 @@ class FinalReviewV070Test(unittest.TestCase):
 
         book = load_workbook(exported['artifacts'][0]['path'], read_only=True, data_only=True)
         try:
-            self.assertIn('Cross Check Dokumen', book.sheetnames)
-            self.assertIn('Anomali', book.sheetnames)
-            review_sheet = book['Ringkasan Review']
+            self.assertIn('Pencocokan Dokumen', book.sheetnames)
+            self.assertIn('Konfirmasi Data', book.sheetnames)
+            review_sheet = book['Ringkasan Pemeriksaan']
             self.assertEqual(review_sheet['D2'].value, 'Memenuhi')
-            audit = book['Audit Fakta']
-            codes = {audit.cell(row, 3).value for row in range(2, audit.max_row + 1)}
-            self.assertIn('cv_supporting_document_match', codes)
-            self.assertIn('data_anomaly', codes)
-            self.assertIn('kak_conclusion', codes)
+            audit = book['Hasil Pemeriksaan']
+            labels = {audit.cell(row, 4).value for row in range(2, audit.max_row + 1)}
+            self.assertIn('Kesesuaian CV dengan dokumen pendukung', labels)
+            self.assertIn('Informasi yang perlu diperiksa kembali', labels)
+            self.assertIn('Kesimpulan pemenuhan KAK', labels)
         finally:
             book.close()
 
