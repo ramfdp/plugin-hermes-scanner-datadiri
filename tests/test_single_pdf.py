@@ -124,7 +124,9 @@ class SinglePDFTest(unittest.TestCase):
             self.assertEqual(book['Ringkasan Personel'].max_row, 14)
             self.assertEqual(book['Ringkasan Personel']['G6'].value, 'Belum tersedia')
             self.assertEqual(book['Ringkasan Personel']['B14'].value, 'Personel Sintetis 9')
-            self.assertEqual(book['Verifikasi Sertifikat']['J2'].value, 'belum_dapat_diverifikasi')
+            certificates = book['Verifikasi Sertifikat']
+            headers = {cell.value: cell.column for cell in certificates[1]}
+            self.assertEqual(certificates.cell(2, headers['Verifikasi identitas']).value, 'Belum dapat diverifikasi')
         finally:
             book.close()
         self.assertTrue(Path(exported['artifacts'][1]['path']).is_file())
