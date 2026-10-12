@@ -14,6 +14,7 @@ from scanner.evaluation import (
     detect_duplicates,
     detect_overlaps,
     evaluate_consistency,
+    evaluate_history_facts,
     evaluate_period_accuracy,
     partial_date,
 )
@@ -214,6 +215,10 @@ class FactEngineV051Test(unittest.TestCase):
         }]
         with self.assertRaisesRegex(ValueError, 'server-side'):
             review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_empty_history_is_marked_unavailable_not_complete_zero(self):
+        result = evaluate_history_facts([], date(2026, 9, 30))
+        self.assertFalse(result['history_available'])
 
 
 if __name__ == '__main__':

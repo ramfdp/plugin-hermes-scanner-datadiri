@@ -49,8 +49,6 @@ def render(data, path):
         for key, label in (('finding', 'Temuan:'), ('analysis', 'Penjelasan:'), ('clarification', 'Tindak lanjut:')):
             if view[key]:
                 field(label, view[key])
-        refs(check.get('source_refs', []))
-        refs(check.get('kak_refs', []))
 
     def footer(canvas, doc):
         canvas.saveState()
@@ -76,6 +74,10 @@ def render(data, path):
     field('Versi / paket:', f"{data['kak'].get('version','-')} / {data['kak'].get('package_id','-')}")
     field('Ketersediaan dan sumber KAK:', present.status(data['kak'].get('status')))
     add(present.narrative(data['kak'].get('analysis', '')))
+    kak_unavailable = data['kak'].get('status') == 'tidak_tersedia' or not data['requirements']
+    if kak_unavailable:
+        add('Persyaratan KAK yang dapat dipakai belum tersedia. Pemeriksaan KAK tidak diterapkan; '
+            'hal ini tidak berarti KAK pasti tidak mensyaratkan aspek-aspek tersebut.')
     for limitation in data['limitations']:
         field('Keterbatasan:', present.narrative(limitation))
     add('Identitas sertifikat, masa berlaku pada dokumen, dan kesesuaian terhadap KAK diperiksa secara terpisah. '
@@ -109,54 +111,65 @@ def render(data, path):
         add('Hasil pemeriksaan dokumen dan pengalaman', heading)
         if not person.get('audit_checks'):
             add('Belum ada hasil pemeriksaan untuk personel ini.')
+        unavailable_kak = 0
         for check in person.get('audit_checks', []):
-            check_block(check, person)
+            view = present.check(check, person)
+            if check.get('applicable') is False and check.get('code') in {
+                'position_experience_match', 'project_kak_match', 'organization_role_match',
+                'experience_duration_match', 'responsibility_position_match', 'education_major_match',
+                'certificate_kak_validity', 'technical_competency_match',
+            }:
+                unavailable_kak += 1
+                field(view['label'] + ':', view['status'])
+                continue
+            field(view['label'] + ':', view['status'])
+            if check.get('status') != 'memenuhi' and view['finding']:
+                add(view['finding'], small)
+        if unavailable_kak and not kak_unavailable:
+            add(f'{unavailable_kak} aspek KAK tidak diterapkan karena persyaratan yang dapat dipakai belum tersedia. '
+                'Hal ini tidak berarti KAK pasti tidak mensyaratkannya.', small)
 
         cross = person.get('document_cross_check', {})
-        if cross.get('details'):
+        cross_items = [item for detail in cross.get('details', []) for item in detail.get('fields', [])
+                       if item.get('status') != 'match']
+        if cross_items:
             add('Pencocokan CV dan dokumen pendukung', heading)
-        for detail in cross.get('details', []):
-            add(present.kind(detail.get('type')), sub)
-            if detail.get('experience_id'):
-                field('Pengalaman:', present.experience(person, detail['experience_id']))
-            if detail.get('record'):
-                field('Nomor urut riwayat pendidikan:', detail['record'])
-            for item in detail.get('fields', []):
-                field('Informasi yang diperiksa:', present.field(item.get('field')))
-                field('Isi CV:', item.get('cv_value', ''))
-                support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
-                field('Isi dokumen pendukung:', support or 'Belum tersedia untuk informasi ini')
-                field('Hasil pencocokan:', present.status(item.get('status')))
+            conflicts = sum(item.get('status') == 'conflict' for item in cross_items)
+            missing = len(cross_items) - conflicts
+            add(f'{conflicts} perbedaan informasi dan {missing} butir belum memiliki bukti pembanding. '
+                'Rincian field tetap tersedia dalam arsip audit dan workbook.', small)
 
         if person.get('anomalies'):
             add('Informasi yang perlu dikonfirmasi', heading)
-        for index, anomaly in enumerate(person.get('anomalies', []), 1):
-            add(f"{index}. {present.anomaly_label(anomaly.get('code'))}", sub)
-            field('Ditandai penting untuk klarifikasi:', present.flag(anomaly.get('material')))
-            if anomaly.get('experience_ids'):
+        for index, anomaly in enumerate(present.anomaly_groups(person), 1):
+            add(f"{index}. {anomaly['label']}", sub)
+            field('Prioritas:', 'Penting untuk klarifikasi' if anomaly['material'] else 'Catatan pendukung')
+            if anomaly['experience_ids']:
                 field('Pengalaman:', present.experiences(person, anomaly['experience_ids']))
-            if anomaly.get('field'):
-                field('Informasi yang diperiksa:', present.field(anomaly['field']))
-            add(present.narrative(anomaly.get('detail', ''), person))
-            refs(anomaly.get('source_refs', []))
+            if anomaly['fields']:
+                field('Informasi yang diperiksa:', ', '.join(present.field(value) for value in anomaly['fields']))
+            add(anomaly['detail'])
         final = person.get('final_conclusion', {})
         add('Kesimpulan pemenuhan KAK', heading)
         field('Hasil:', present.status(final.get('status', 'perlu_klarifikasi')))
         field('Dasar:', present.narrative(final.get('finding', 'Kesimpulan belum tersedia.'), person))
-        if person.get('kak_match_details'):
-            add('Pemeriksaan KAK Terperinci', heading)
-        for item in person.get('kak_match_details', []):
+        unresolved_kak = [item for item in person.get('kak_match_details', [])
+                          if item.get('applicable', True) and item.get('status') != 'memenuhi']
+        if unresolved_kak:
+            add('Persyaratan KAK yang memerlukan perhatian', heading)
+        for item in unresolved_kak:
             field('Persyaratan:', item.get('requirement_text', ''))
-            if item.get('experience_ids'):
-                field('Pengalaman terkait:', present.experiences(person, item['experience_ids']))
             check_block(item, person)
 
         add('Riwayat dan bukti pengalaman', heading)
         chronology = person['chronology']
         add(present.narrative(chronology['method'], person))
-        field('Total bulan kalender tanpa hitung ganda:', chronology['calendar_months_unique'])
-        field('Bulan pengalaman yang relevan:', chronology['relevant_months'])
-        field('Bulan relevan dengan bukti pendukung:', chronology['supported_relevant_months'])
+        field('Total bulan kalender tanpa hitung ganda:', chronology['calendar_months_unique']
+              if person['employment_history'] else 'Belum dapat dihitung; riwayat terstruktur belum tersedia')
+        field('Bulan pengalaman yang relevan:', chronology['relevant_months']
+              if person['employment_history'] else 'Belum dapat dihitung')
+        field('Bulan relevan dengan bukti pendukung:', chronology['supported_relevant_months']
+              if person['employment_history'] else 'Belum dapat dihitung')
         if chronology['uncertain_entries']:
             field('Jumlah periode yang belum dapat dihitung penuh:', len(chronology['uncertain_entries']))
             field('Pengalaman yang perlu dilengkapi periodenya:', present.uncertain_experiences(person))
@@ -166,10 +179,6 @@ def render(data, path):
             for key in ('client', 'consultant', 'contractor', 'represented_organization'):
                 if job.get(key):
                     field(present.field(key) + ':', job[key])
-            refs(job.get('source_refs', []))
-            refs(job.get('supporting_refs', []))
-            if job.get('supporting_facts'):
-                field('Informasi dokumen pendukung:', present.supporting_facts(job['supporting_facts']))
         facts = person.get('fact_analysis', {})
         overlaps = facts.get('overlaps', {}).get('pairs', [])
         duplicates = facts.get('duplicates', {}).get('pairs', [])
@@ -204,7 +213,6 @@ def render(data, path):
             add(present.narrative(cert.get('validity_basis', ''), person), small)
             field('Penjelasan:', present.narrative(cert.get('analysis', ''), person))
             field('Batas pemeriksaan:', present.narrative(cert.get('reason', ''), person))
-            refs(cert.get('source_refs', []))
             if cert.get('receipt_id'):
                 add(f"{present.web_source(cert['receipt_id'])}: {cert.get('quote', '')}", small)
                 field('Waktu pemeriksaan:', cert.get('checked_at'))
@@ -212,6 +220,11 @@ def render(data, path):
         for finding in person['findings'] or ['Tidak ada temuan tambahan yang dicatat; tetap periksa keterbatasan di atas.']:
             add(present.narrative(finding, person))
         add(present.narrative(person.get('review_note', ''), person), small)
+        evidence = present.evidence_index(person)
+        if evidence:
+            add('Indeks bukti', heading)
+            add('Setiap kutipan ditampilkan sekali. Rincian keterkaitan per audit tetap tersedia dalam arsip audit dan workbook.', small)
+            refs(evidence)
 
     story.append(PageBreak())
     add('4. Dokumen dan sumber pemeriksaan', heading)

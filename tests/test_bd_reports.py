@@ -207,6 +207,17 @@ class BDPresentationTest(unittest.TestCase):
         self.assertIn('Proyek Jalan Contoh', self.present.uncertain_experiences(self.person))
         self.assertNotIn('Proyek Jembatan Contoh', self.present.uncertain_experiences(self.person))
 
+    def test_anomaly_projection_groups_repeated_field_symptoms(self):
+        base = self.person['anomalies'][0]
+        self.person['anomalies'] = [
+            {**copy.deepcopy(base), 'id': f'A{i:03d}', 'field': field, 'material': False}
+            for i, field in enumerate(['project', 'employer', 'role', 'start_date', 'end_date'], 1)
+        ]
+        groups = self.present.anomaly_groups(self.person)
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['count'], 5)
+        self.assertEqual(len(groups[0]['source_refs']), 1)
+
     def test_short_source_values_do_not_split_internal_identifiers(self):
         self.person['name'] = 'a'
         self.person['certificates'][0]['number'] = '001'
@@ -322,6 +333,18 @@ class BDExportTest(unittest.TestCase):
         book = load_workbook(xlsx_path)
         self.addCleanup(book.close)
         self.assertEqual(book['Ringkasan Pemeriksaan']['D2'].value, 'Perlu Klarifikasi')
+
+    def test_sixty_repeated_anomalies_remain_a_compact_pdf(self):
+        base = self.data['people'][0]['anomalies'][0]
+        self.data['people'][0]['anomalies'] = [
+            {**copy.deepcopy(base), 'id': f'A{i:03d}', 'field': ['project', 'employer', 'role'][i % 3],
+             'material': False}
+            for i in range(1, 61)
+        ]
+        pdf_path, _ = self.export()
+        with pdfium.PdfDocument(str(pdf_path)) as document:
+            self.assertLessEqual(len(document), 8)
+        self.assertIn('60 catatan audit terkait', pdf_text(pdf_path))
 
 
 if __name__ == '__main__':

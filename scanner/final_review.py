@@ -44,6 +44,10 @@ def _refs_from_history(history):
     return _unique_refs(refs)
 
 
+def _refs_from_job(job):
+    return _refs_from_history([job])
+
+
 def _refs_from_education(records):
     refs = []
     for record in records:
@@ -80,6 +84,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
         all_refs.extend(job.get("supporting_refs", []))
         for fact in facts:
             all_refs.extend(fact.get("source_refs", []))
+        record_refs = _refs_from_job(job)
         for field in CROSS_FIELDS:
             claimed = job.get(field)
             if not isinstance(claimed, str) or not claimed.strip():
@@ -92,7 +97,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             if not supported_values:
                 item = {
                     "experience_id": job_id, "field": field, "cv_value": claimed,
-                    "status": "missing_support",
+                    "status": "missing_support", "source_refs": record_refs,
                 }
                 missing.append(item)
                 row["fields"].append(item)
@@ -101,12 +106,12 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             if matches:
                 row["fields"].append({
                     "experience_id": job_id, "field": field, "cv_value": claimed,
-                    "support_value": matches[0], "status": "match",
+                    "support_value": matches[0], "status": "match", "source_refs": record_refs,
                 })
             else:
                 item = {
                     "experience_id": job_id, "field": field, "cv_value": claimed,
-                    "support_values": supported_values, "status": "conflict",
+                    "support_values": supported_values, "status": "conflict", "source_refs": record_refs,
                 }
                 conflicts.append(item)
                 row["fields"].append(item)
@@ -117,6 +122,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
     for index, record in enumerate(education_records, 1):
         source_refs = record.get("source_refs", [])
         supporting_refs = record.get("supporting_refs", [])
+        record_refs = _unique_refs([*source_refs, *supporting_refs])
         all_refs.extend(source_refs)
         all_refs.extend(supporting_refs)
         row = {"type": "education", "record": index, "fields": []}
@@ -132,24 +138,24 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             if not supporting_refs:
                 item = {
                     "record": index, "field": field, "cv_value": value,
-                    "status": "missing_support",
+                    "status": "missing_support", "source_refs": record_refs,
                 }
                 missing.append(item)
             elif cv_match and support_match:
                 item = {
                     "record": index, "field": field, "cv_value": value,
-                    "support_value": value, "status": "match",
+                    "support_value": value, "status": "match", "source_refs": record_refs,
                 }
             elif cv_match and not support_match:
                 item = {
                     "record": index, "field": field, "cv_value": value,
-                    "status": "support_does_not_show_value",
+                    "status": "support_does_not_show_value", "source_refs": record_refs,
                 }
                 missing.append(item)
             else:
                 item = {
                     "record": index, "field": field, "cv_value": value,
-                    "status": "cv_does_not_show_value",
+                    "status": "cv_does_not_show_value", "source_refs": record_refs,
                 }
                 conflicts.append(item)
             row["fields"].append(item)
@@ -166,8 +172,16 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             missing.append(item)
             details.append({"type": "certificate", "fields": [item]})
         else:
+            certificate_refs = _refs_from_certificates(certificates)
+            usable = [cert for cert in certificates if canonical_text(cert.get("scheme", ""))]
+            if not usable:
+                item = {"field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
+                        "status": "missing_support", "source_refs": certificate_refs}
+                missing.append(item)
+                details.append({"type": "certificate", "fields": [item]})
+                usable = None
             matches = []
-            for cert in certificates:
+            for cert in usable or []:
                 scheme = canonical_text(cert.get("scheme", ""))
                 level = canonical_text(cert.get("level", ""))
                 scheme_ok = bool(scheme) and scheme in summary
@@ -178,12 +192,13 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                 details.append({"type": "certificate", "fields": [{
                     "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
                     "support_value": matches[0].get("scheme", ""), "status": "match",
+                    "source_refs": certificate_refs,
                 }]})
-            else:
+            elif usable is not None:
                 item = {
                     "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
-                    "support_values": [cert.get("scheme", "") for cert in certificates],
-                    "status": "conflict",
+                    "support_values": [cert.get("scheme", "") for cert in usable],
+                    "status": "conflict", "source_refs": certificate_refs,
                 }
                 conflicts.append(item)
                 details.append({"type": "certificate", "fields": [item]})
@@ -306,7 +321,7 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
             f"Cross-check dokumen berbeda pada field {item.get('field')}.",
             experience_ids=[item["experience_id"]] if item.get("experience_id") else [],
             field=item.get("field"),
-            source_refs=cross_check.get("check", {}).get("source_refs", []),
+            source_refs=item.get("source_refs", []),
         )
     for item in cross_check.get("missing", []):
         add(
@@ -314,14 +329,15 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
             f"Dokumen pendukung belum cukup untuk field {item.get('field')}.",
             experience_ids=[item["experience_id"]] if item.get("experience_id") else [],
             field=item.get("field"),
-            source_refs=cross_check.get("check", {}).get("source_refs", []),
+            source_refs=item.get("source_refs", []),
             material=False,
         )
 
     claimed = person.get("identity", {}).get("claimed_months")
     unique_months = person.get("chronology", {}).get("calendar_months_unique")
     uncertain = person.get("chronology", {}).get("uncertain_entries", [])
-    if isinstance(claimed, int) and isinstance(unique_months, int) and not uncertain and abs(claimed - unique_months) > 1:
+    if (person.get("employment_history") and isinstance(claimed, int) and
+            isinstance(unique_months, int) and not uncertain and abs(claimed - unique_months) > 1):
         add(
             "claimed_duration_mismatch",
             f"Klaim pengalaman {claimed} bulan berbeda dari kronologi unik {unique_months} bulan.",

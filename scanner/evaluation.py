@@ -523,6 +523,7 @@ def evaluate_history_facts(history, as_of):
     checks.sort(key=lambda item: order[item["code"]])
     return {
         "method_version": 1,
+        "history_available": bool(history),
         "period": {key: value for key, value in period.items() if key != "check"},
         "consistency": {key: value for key, value in consistency.items() if key != "check"},
         "overlaps": {key: value for key, value in overlap.items() if key != "check"},

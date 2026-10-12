@@ -108,8 +108,64 @@ class ReportPresenter:
 
     def references(self, values):
         # Quotes are evidence, not narrative: no glossary or rewriting is applied.
+        unique, seen = [], set()
+        for ref in values or []:
+            key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
+            if key not in seen:
+                seen.add(key)
+                unique.append(ref)
         return '\n'.join(f"{self.document(r.get('document_id'))}, halaman {r.get('page', '?')}: {r.get('quote', '')}"
-                         for r in values or [])
+                         for r in unique)
+
+    def anomaly_groups(self, person):
+        """Compact related symptoms for presentation; snapshot anomalies stay unchanged."""
+        groups = {}
+        for anomaly in person.get('anomalies', []):
+            code = str(anomaly.get('code', ''))
+            family = ('document_support' if code.startswith(('cv_support_', 'consistency_')) else
+                      'period' if code.startswith('period_') else code)
+            key = (family, tuple(anomaly.get('experience_ids', [])), bool(anomaly.get('material')))
+            group = groups.setdefault(key, {
+                'label': self.anomaly_label(code), 'material': bool(anomaly.get('material')),
+                'experience_ids': list(anomaly.get('experience_ids', [])), 'fields': [],
+                'details': [], 'source_refs': [], 'count': 0,
+            })
+            group['count'] += 1
+            if anomaly.get('field') and anomaly['field'] not in group['fields']:
+                group['fields'].append(anomaly['field'])
+            if anomaly.get('detail'):
+                group['details'].append(self.narrative(anomaly['detail'], person))
+            group['source_refs'].extend(anomaly.get('source_refs', []))
+        for group in groups.values():
+            unique_refs, seen = [], set()
+            for ref in group['source_refs']:
+                key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
+                if key not in seen:
+                    seen.add(key)
+                    unique_refs.append(ref)
+            group['source_refs'] = unique_refs
+            group['detail'] = (group['details'][0] if group['count'] == 1 else
+                               f"{group['count']} catatan audit terkait dikelompokkan; rincian lengkap tetap tersimpan dalam arsip audit.")
+        return sorted(groups.values(), key=lambda item: (not item['material'], item['label']))
+
+    @staticmethod
+    def evidence_index(person):
+        refs = []
+        for collection in ('checks', 'audit_checks', 'anomalies', 'education_records',
+                           'employment_history', 'certificates', 'kak_match_details'):
+            for item in person.get(collection, []):
+                refs.extend(item.get('source_refs', []))
+                refs.extend(item.get('supporting_refs', []))
+                refs.extend(item.get('kak_refs', []))
+                for fact in item.get('supporting_facts', []):
+                    refs.extend(fact.get('source_refs', []))
+        result, seen = [], set()
+        for ref in refs:
+            key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
+            if key not in seen:
+                seen.add(key)
+                result.append(ref)
+        return result
 
     @staticmethod
     def experience(person, experience_id):

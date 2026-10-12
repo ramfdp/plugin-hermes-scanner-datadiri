@@ -8,6 +8,7 @@ from unittest.mock import patch
 from openpyxl import load_workbook
 
 from scanner import review, storage
+from scanner.final_review import evaluate_anomalies, evaluate_cv_supporting_documents
 from helpers import create_run, plan_payload, person_payload
 
 
@@ -271,6 +272,38 @@ class FinalReviewV070Test(unittest.TestCase):
         }]
         with self.assertRaisesRegex(ValueError, 'server-side'):
             review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_cross_check_anomaly_keeps_only_record_evidence(self):
+        first = self.ref(1, 'Proyek pertama')
+        second = self.ref(2, 'Proyek kedua')
+        history = [
+            {'id': 'E001', 'project': 'Proyek pertama', 'source_refs': [first], 'supporting_facts': []},
+            {'id': 'E002', 'project': 'Proyek kedua', 'source_refs': [second], 'supporting_facts': []},
+        ]
+        cross = evaluate_cv_supporting_documents({}, history, [], [])
+        result = evaluate_anomalies(
+            {'identity': {}, 'employment_history': history, 'education_records': [],
+             'certificates': [], 'chronology': {}}, {}, cross)
+        anomaly = next(item for item in result['items'] if item['experience_ids'] == ['E001'])
+        self.assertEqual(anomaly['source_refs'], [first])
+
+    def test_missing_certificate_scheme_is_insufficient_evidence_not_conflict(self):
+        ref = self.ref(3, 'CERT-001 Level 7')
+        cross = evaluate_cv_supporting_documents(
+            {'certificate_summary': 'Ahli Teknik Jembatan Level 7'}, [], [],
+            [{'scheme': '', 'level': '7', 'source_refs': [ref]}])
+        item = cross['details'][0]['fields'][0]
+        self.assertEqual(item['status'], 'missing_support')
+        self.assertEqual(cross['conflicts'], [])
+        self.assertEqual(cross['missing'], [item])
+
+    def test_empty_history_does_not_turn_claimed_duration_into_zero_mismatch(self):
+        cross = evaluate_cv_supporting_documents({}, [], [], [])
+        result = evaluate_anomalies(
+            {'identity': {'claimed_months': 120}, 'employment_history': [],
+             'education_records': [], 'certificates': [],
+             'chronology': {'calendar_months_unique': 0, 'uncertain_entries': []}}, {}, cross)
+        self.assertFalse(any(item['code'] == 'claimed_duration_mismatch' for item in result['items']))
 
     def test_export_contains_cross_check_anomaly_and_final_conclusion(self):
         rid = self.prepare_run()
