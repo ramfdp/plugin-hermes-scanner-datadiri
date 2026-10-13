@@ -98,7 +98,7 @@ class LiveWorkflowTest(unittest.TestCase):
 
     def test_parent_reports_a_worker_timeout_not_fake_completion(self):
         def process(module, prefix, argv, **options):
-            self.assertEqual(module, 'scanner.live_worker')
+            self.assertEqual(module, 'run_native')
             op = options['payload']['_progress_operation']
             with progress.tracking(self.pid, self.rid, 'ocr', op):
                 progress.emit(pages_done=3, pages_total=54)

@@ -28,6 +28,7 @@ class SyncTest(unittest.TestCase):
         self.desktop = self.home / 'desktop-plugins' / PLUGIN_ID
         for relative, content in {
             '__init__.py': '# package\n', 'plugin.yaml': f'name: {PLUGIN_ID}\nversion: 0.4.2\n',
+            'run_native.py': 'from scanner.live_worker import main\n',
             'scanner/__init__.py': '__version__ = "0.4.2"\n', 'scanner/tools.py': 'version = 2\n',
             'desktop/plugin.js': f"const VERSION = '0.4.2'\nexport default {{ id: '{PLUGIN_ID}' }}\n",
             'docs/debug.md': 'Read-only diagnostics.\n', 'requirements/base.txt': '# test\n', 'requirements.txt': '# test\n',
@@ -69,6 +70,7 @@ class SyncTest(unittest.TestCase):
         self.assertEqual((backup / 'desktop/plugin.js').read_bytes(), old_popup)
         self.assertEqual((backup / 'backend/tools.py').read_text(), 'legacy = True\n')
         self.assertFalse((self.backend / 'tools.py').exists())
+        self.assertEqual((self.backend / 'run_native.py').read_text(), 'from scanner.live_worker import main\n')
         for p, content in originals.items(): self.assertEqual(p.read_bytes(), content)
         marker = json.loads((self.desktop / MARKER).read_text())
         self.assertEqual(marker['package'], PLUGIN_ID)

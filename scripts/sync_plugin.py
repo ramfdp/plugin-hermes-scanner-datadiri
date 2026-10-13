@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 from scanner import __version__
 from scanner.installation import PLUGIN_ID, MARKER, LEGACY, locations, read_desktop_marker, duplicate_desktop_copies, compare_installation
 
-COPY_NAMES = ('__init__.py', 'plugin.yaml', 'scanner', 'desktop', 'dashboard', 'docs', 'requirements', 'requirements.txt')
+COPY_NAMES = ('__init__.py', 'plugin.yaml', 'run_native.py', 'scanner', 'desktop', 'dashboard', 'docs', 'requirements', 'requirements.txt')
 OLD_NAMES = (*LEGACY, 'download_model.py', 'finish_migration.ps1', 'local_only_report.py')
 
 

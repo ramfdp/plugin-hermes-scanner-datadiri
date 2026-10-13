@@ -87,7 +87,7 @@ def compare_desktop(runtime_root, installed_root, desktop_root):
 def compare_installation(runtime_root, installed_root, desktop_root=None):
     runtime = Path(runtime_root).expanduser().resolve()
     installed = Path(installed_root).expanduser().resolve()
-    files = {Path('__init__.py'), Path('plugin.yaml')}
+    files = {Path('__init__.py'), Path('plugin.yaml'), Path('run_native.py')}
     if (runtime / 'scanner/live_tools.py').is_file():
         files.update((Path('dashboard/manifest.json'), Path('dashboard/plugin_api.py')))
     for folder, pattern in (('scanner', '*.py'), ('desktop', '*.js'), ('docs', '*.md'), ('dashboard', '*.py'), ('dashboard', '*.json')):

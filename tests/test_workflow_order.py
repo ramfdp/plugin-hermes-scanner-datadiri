@@ -149,6 +149,7 @@ class InstallationTest(unittest.TestCase):
                 (root / 'scanner').mkdir(parents=True)
                 (root / '__init__.py').write_text('register = None\n', encoding='utf-8')
                 (root / 'plugin.yaml').write_text('version: 0.4.1\n', encoding='utf-8')
+                (root / 'run_native.py').write_text('from scanner.live_worker import main\n', encoding='utf-8')
             (source / 'scanner/tools.py').write_bytes(b'new = True\n')
             (target / 'scanner/tools.py').write_bytes(b'new = True\r\n')
             self.assertTrue(compare_installation(source, target)['success'])

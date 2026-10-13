@@ -20,7 +20,7 @@ Input tetap satu PDF dan satu tombol **Mulai scan**. KAK/form tambahan tidak diw
 ## Cara kerja
 
 `__init__.py` mendaftarkan adapter `scanner.live_tools`. Worker memakai
-`scanner.live_worker`, yang memanggil engine `scanner.workflow` tanpa mengubah aturan
+`run_native`, yang memanggil adapter `scanner.live_worker` dan engine `scanner.workflow` tanpa mengubah aturan
 bukti atau urutan Excel sebelum web. Tool kompatibilitas lama tetap tersedia.
 
 `scanner.progress` menyimpan snapshot kecil secara atomic di

@@ -1,4 +1,4 @@
-from scanner.workflow import main
+from scanner.live_worker import main
 
 
 if __name__ == "__main__":

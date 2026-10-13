@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    files = [ROOT / '__init__.py']
+    files = [ROOT / '__init__.py', ROOT / 'run_native.py']
     for directory in ('scanner', 'scripts', 'tests', 'desktop', 'dashboard'):
         files.extend(p for p in (ROOT / directory).rglob('*') if p.suffix in {'.py', '.js', '.cjs', '.ps1'})
     failures = []
