@@ -42,9 +42,10 @@ tersedia, laporan menjelaskan bahwa kelengkapan dan keterbacaan KAK perlu
 diperiksa kembali. Status, nilai `applicable`, dan kesimpulan evaluasi asli tidak
 berubah.
 
-Pemisahan penyebab di mesin evaluasi (KAK tidak tersedia, tidak terbaca, belum
-berhasil dipetakan, atau benar-benar tidak mensyaratkan suatu aspek) **bukan
-bagian perubahan ini** dan harus ditangani dalam perubahan terpisah.
+Mesin evaluasi membedakan KAK tidak tersedia, tidak terbaca, belum lengkap dipetakan,
+lengkap tanpa requirement terpetakan, lengkap tanpa requirement yang berlaku, dan lengkap
+dengan requirement yang berlaku. Nol requirement yang berlaku tidak menghasilkan
+**Memenuhi**; laporan menampilkan **Perlu Klarifikasi** beserta keterbatasannya.
 
 ## Perubahan antarmuka Excel
 

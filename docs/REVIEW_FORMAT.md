@@ -130,6 +130,12 @@ Semua kriteria yang berlaku harus memiliki satu check, dan semua certificate_inv
    "issued_on":null,"expires_on":null,
    "analysis":"Nomor tersedia dalam lampiran tetapi data sertifikat belum dapat diperiksa pada portal resmi.",
    "source_refs":[{"document_id":"D003","page":1,"quote":"Sertifikat Contoh"}]}],
+ "certificate_claims":[{"id":"CC1","title":"Skema contoh","number":"CONTOH-001",
+   "level":"7","issuer":"Penerbit contoh","inventory_id":"C1",
+   "source_refs":[{"document_id":"D001","page":1,"quote":"Skema contoh CONTOH-001 level 7"}]}],
+ "certificate_extraction":{"status":"complete","identified_count":1,
+   "analysis":"Seluruh klaim sertifikat yang dapat dibedakan pada CV telah dipetakan.",
+   "source_refs":[{"document_id":"D001","page":1,"quote":"Skema contoh CONTOH-001 level 7"}]},
  "certificate_limitation":"",
  "audit_checks":[],
  "findings":["Keabsahan sertifikat belum dapat dipastikan tanpa hasil portal penerbit."]}
@@ -144,6 +150,13 @@ Jangan menggabungkan nomor seseorang dengan nama orang lain. Status LSP bukan st
 Tanggal dokumen dinilai terpisah, bukan jaminan sertifikat belum dicabut; jangan menebak tanggal/masa berlaku.
 `source_refs` sertifikat harus sama dengan inventory. Sertifikat tidak ada: `certificates=[]`, inventory kosong,
 dan `certificate_limitation` wajib menjelaskan keterbatasan.
+
+`certificate_claims` memisahkan klaim CV dari dokumen sertifikat. Setiap klaim yang dapat dibedakan memakai ID unik
+dan referensi halaman `cv`; `inventory_id` menunjuk tepat satu lampiran atau `null` bila belum terpetakan. Status
+`complete` hanya sah bila `identified_count` sama dengan jumlah klaim dan seluruh klaim/inventory direkonsiliasi.
+`partial`, `claimed_not_extracted`, dan `unknown` mempertahankan ketidakpastian. `no_certificates_declared` hanya sah
+dengan hitungan nol, klaim/inventory kosong, serta bukti seluruh halaman CV personel. Untuk pendidikan, `source_refs`
+adalah asal klaim pada CV; `supporting_refs` hanya lampiran independen milik personel yang sama.
 
 Setiap baris `employment_history` memperoleh `id` snapshot-local (`E001`, `E002`, dst.) jika ID belum diberikan. Semua perusahaan di employment_history wajib memiliki employer_check (boleh belum terverifikasi).
 `history_extraction` membedakan `no_experience_declared`, `claimed_not_extracted`, `partially_extracted`,

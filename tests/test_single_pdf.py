@@ -192,7 +192,7 @@ class SinglePDFTest(unittest.TestCase):
         self.assertTrue(result['success'], result)
         for person in people:
             result = workflow.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
-            self.assertEqual(result['overall'], 'tidak_ada_kriteria_KAK')
+            self.assertEqual(result['overall'], 'perlu_klarifikasi')
             self.assertEqual(result['certificates'][0]['status'], 'belum_dapat_diverifikasi')
         exported = workflow.dispatch({'action': 'export', 'run_id': rid})
         self.assertTrue(exported['workflow_complete'], exported)

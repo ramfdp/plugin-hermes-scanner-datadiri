@@ -37,6 +37,9 @@ Data tidak diketahui memakai string kosong/null, bukan nilai tebakan. Bulan di r
 
 6. `scanner_web_lookup` memeriksa sertifikat/perusahaan yang dapat diperiksa dengan sumber resmi/relevan. KAK hanya ditelusuri bila identitas paket/versinya didukung; filename bukan identitas resmi. Nomor sertifikat hanya pada portal resmi, bukan mesin pencari. Jangan mengirim CV/NIK/kontak/nama kandidat ke mesin pencari. Jangan bypass CAPTCHA/login atau mengarang endpoint. Simpan receipt asli. Gagal akses atau tidak ditemukan bukan bukti palsu; lanjutkan laporan dengan keterbatasan. Klien backend yang menetapkan `allow_web=false` melewati tahap ini secara eksplisit.
 7. `verify_kak` hanya memperbarui `analysis` dan `receipt_ids` tanpa mengubah roster/requirements. Bila KAK tidak tersedia, sampaikan keterbatasannya dan lanjut. `save_person` untuk SEMUA orang mengikuti REVIEW_FORMAT.md. Meskipun checks KAK kosong, summary, riwayat, sertifikat dan temuan tetap diisi berdasarkan bukti.
+   Setiap klaim sertifikat CV dipetakan sebagai `certificate_claims`; satu klaim memakai maksimal satu `certificate_inventory`.
+   Referensi klaim pendidikan/sertifikat berasal dari `cv`. Hanya halaman `attachment` milik personel yang sama menjadi
+   bukti pendukung independen. Nol requirement KAK yang berlaku tetap menghasilkan **Perlu Klarifikasi**, bukan **Memenuhi**.
 8. `status` memperlihatkan personel tersisa dan tahap berikutnya. `export` menghasilkan XLSX final dan PDF analisis dari satu snapshot. JSON dan Excel awal tetap berkas kerja lokal.
 9. Hanya `workflow_complete=true` DAN dua artefak final yang berarti ekspor lengkap. Chat berisi ringkasan dan `chat_markdown` dengan XLSX/PDF, bukan log internal. `report_complete=false` sah bila bukti/KAK/web terbatas. Jangan menyatakan semua valid hanya karena ekspor berhasil. Bila satu ekspor gagal, laporkan dan tautkan file yang benar-benar tersedia.
 

@@ -99,6 +99,7 @@ class ReviewTest(unittest.TestCase):
             person = person_payload(i)
             if i == 1:
                 person['certificates'] = []
+                person['certificate_claims'][0]['inventory_id'] = None
                 person['certificate_limitation'] = 'Lampiran sertifikat tidak terbaca.'
                 person['certificate_extraction'] = {
                     'status': 'claimed_not_extracted', 'identified_count': 1,
@@ -143,7 +144,75 @@ class ReviewTest(unittest.TestCase):
         person = person_payload(0)
         person['checks'] = []
         result = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
-        self.assertEqual(result['overall'], 'tidak_ada_kriteria_KAK')
+        self.assertEqual(result['overall'], 'perlu_klarifikasi')
+
+    def test_cv_page_cannot_be_used_as_independent_education_support(self):
+        rid = create_run(self.root)
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+        person = person_payload(0)
+        claim = {'document_id': 'D001', 'page': 1, 'quote': 'S1 Teknik Sipil'}
+        person['education_records'] = [{
+            'level': 'S1', 'degree': '', 'major': 'Teknik Sipil', 'institution': '',
+            'source_refs': [claim], 'supporting_refs': [claim],
+        }]
+        with self.assertRaisesRegex(ValueError, 'education_records.supporting_refs.*attachment'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_no_certificates_declared_requires_zero_identified_count(self):
+        rid = create_run(self.root)
+        plan = plan_payload()
+        plan['roster'][0]['certificate_inventory'] = []
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan})
+        person = person_payload(0)
+        person['identity']['certificate_summary'] = ''
+        person['certificates'] = []
+        person['certificate_claims'] = []
+        person['certificate_limitation'] = 'CV sintetis tidak menyatakan sertifikat.'
+        person['certificate_extraction'] = {
+            'status': 'no_certificates_declared', 'identified_count': 1,
+            'analysis': 'Seluruh halaman CV sintetis telah ditinjau untuk klaim sertifikat.',
+            'source_refs': [{'document_id': 'D001', 'page': 1, 'quote': 'Personel Contoh A'}],
+        }
+        with self.assertRaisesRegex(ValueError, 'no_certificates_declared.*identified_count=0'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_certificate_extraction_states_reject_contradictions(self):
+        cases = [
+            ('complete count', {'status': 'complete', 'identified_count': 2}, 'complete.*jumlah'),
+            ('partial fully mapped', {'status': 'partial', 'identified_count': 1}, 'partial.*belum terpetakan'),
+            ('absence with claim', {'status': 'no_certificates_declared', 'identified_count': 0},
+             'no_certificates_declared.*klaim'),
+        ]
+        for label, state, message in cases:
+            with self.subTest(label=label):
+                rid = create_run(self.root)
+                review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+                person = person_payload(0)
+                person['certificate_extraction'].update(state)
+                with self.assertRaisesRegex(ValueError, message):
+                    review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_claimed_not_extracted_requires_supported_claim(self):
+        rid = create_run(self.root)
+        plan = plan_payload()
+        plan['roster'][0]['certificate_inventory'] = []
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan})
+        person = person_payload(0)
+        person.update(certificates=[], certificate_claims=[], certificate_limitation='Tidak ada lampiran sertifikat.')
+        person['identity']['certificate_summary'] = ''
+        person['certificate_extraction'].update(status='claimed_not_extracted', identified_count=1)
+        with self.assertRaisesRegex(ValueError, 'claimed_not_extracted.*klaim'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_unknown_certificate_extraction_preserves_uncertainty(self):
+        rid = create_run(self.root)
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+        person = person_payload(0)
+        person['certificate_extraction'].update(status='unknown', identified_count=None)
+        result = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        saved = storage.load(storage.run_dir(rid) / 'people/P1.json')
+        self.assertEqual(saved['certificate_extraction']['status'], 'unknown')
+        self.assertEqual(result['final_conclusion']['status'], 'perlu_klarifikasi')
 
     def test_search_result_is_not_verification_evidence(self):
         rid = create_run(self.root)

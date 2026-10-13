@@ -71,7 +71,7 @@ def _same(field, left, right):
 
 
 def evaluate_cv_supporting_documents(identity, history, education_records, certificates,
-                                     certificate_extraction=None):
+                                     certificate_extraction=None, certificate_claims=None):
     details, conflicts, missing = [], [], []
     all_refs = []
     comparable_count = 0
@@ -130,8 +130,8 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
         missing.append(item)
         details.append({"type": "education", "fields": [item]})
     for index, record in enumerate(education_records, 1):
-        source_refs = record.get("source_refs", [])
-        supporting_refs = record.get("supporting_refs", [])
+        source_refs = record.get("claim_refs", record.get("source_refs", []))
+        supporting_refs = record.get("independent_supporting_refs", record.get("supporting_refs", []))
         record_refs = _unique_refs([*source_refs, *supporting_refs])
         all_refs.extend(source_refs)
         all_refs.extend(supporting_refs)
@@ -171,11 +171,42 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             row["fields"].append(item)
         details.append(row)
 
-    # Certificate summary in CV versus mapped certificate attachments.
+    # Individual CV certificate claims versus independent certificate attachments.
     summary = canonical_text(identity.get("certificate_summary", ""))
     extraction = certificate_extraction
     all_refs.extend(_refs_from_certificates(certificates))
-    if summary:
+    if certificate_claims:
+        certificates_by_id = {cert.get("inventory_id"): cert for cert in certificates}
+        row = {"type": "certificate", "fields": []}
+        for claim in certificate_claims:
+            comparable_count += 1
+            cert = certificates_by_id.get(claim.get("inventory_id"))
+            refs = _unique_refs([*claim.get("source_refs", []), *(cert or {}).get("source_refs", [])])
+            all_refs.extend(refs)
+            item = {
+                "claim_id": claim.get("id"), "inventory_id": claim.get("inventory_id"),
+                "field": "certificate", "cv_value": claim.get("title", ""), "source_refs": refs,
+            }
+            if not cert or cert.get("independent_support") is not True:
+                item["status"] = "missing_support"
+                missing.append(item)
+            elif not all(canonical_text(cert.get(field, "")) for field in ("number", "holder", "scheme")):
+                item["status"] = "missing_critical_fields"
+                missing.append(item)
+            else:
+                comparisons = [("title", "scheme"), ("number", "number"),
+                               ("level", "level"), ("issuer", "issuer")]
+                mismatches = [claim_field for claim_field, cert_field in comparisons
+                              if canonical_text(claim.get(claim_field, "")) and
+                              canonical_text(claim.get(claim_field, "")) != canonical_text(cert.get(cert_field, ""))]
+                if mismatches:
+                    item.update(status="conflict", conflicting_fields=mismatches)
+                    conflicts.append(item)
+                else:
+                    item.update(status="match", support_value=cert.get("scheme", ""))
+            row["fields"].append(item)
+        details.append(row)
+    elif summary:
         comparable_count += 1
         if not certificates:
             item = {"field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
@@ -448,8 +479,8 @@ def final_conclusion(audit_checks, legacy_checks, requirements, kak):
         else:
             finding = "Tidak ada kriteria yang pasti Tidak Memenuhi, tetapi masih ada audit atau bukti yang memerlukan klarifikasi."
     elif not has_kak_criteria:
-        status = "memenuhi"
-        finding = "Cakupan KAK lengkap dan tidak ada persyaratan yang berlaku untuk posisi personel ini."
+        status = "perlu_klarifikasi"
+        finding = "Cakupan KAK lengkap, tetapi tidak ada persyaratan yang berlaku untuk posisi personel ini; pemenuhan belum dapat disimpulkan."
     else:
         status = "memenuhi"
         finding = "Seluruh kriteria KAK yang berlaku dan seluruh audit yang relevan berstatus Memenuhi."
@@ -490,6 +521,7 @@ def finalize_person_review(person, requirements, kak, audit_checks, legacy_check
         person.get("education_records", []),
         person.get("certificates", []),
         person.get("certificate_extraction"),
+        person.get("certificate_claims"),
     )
     person["document_cross_check"] = {
         key: value for key, value in cross_check.items() if key != "check"

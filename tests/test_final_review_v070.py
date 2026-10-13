@@ -37,7 +37,8 @@ class FinalReviewV070Test(unittest.TestCase):
         pages = [
             'Personel Final\nS1 Teknik Sipil\nSite Engineer\nProyek Jembatan Sungai\n'
             'Konsultan: PT Konsultan A | Pemberi Kerja: Dinas PU\n'
-            'Kontraktor: PT Kontraktor A\nPengawasan struktur jembatan\n2020-01 sampai 2021-12',
+            'Kontraktor: PT Kontraktor A\nPengawasan struktur jembatan\n2020-01 sampai 2021-12\n'
+            'Ahli Teknik Jembatan Level 7',
             'IJAZAH\nPersonel Final\nIjazah S1 Teknik Sipil\nSarjana Teknik\nUniversitas Contoh',
             'CERT-001 Personel Final Ahli Teknik Jembatan BNSP Level 7',
             'KAK POSISI ENGINEER\n'
@@ -210,6 +211,10 @@ class FinalReviewV070Test(unittest.TestCase):
                 'issued_on': '2025-01-01', 'expires_on': expires_on,
                 'analysis': 'Sertifikat sintetis memuat skema dan jenjang yang dapat dibandingkan dengan requirement KAK.',
                 'source_refs': [self.ref(3, 'CERT-001 Personel Final Ahli Teknik Jembatan BNSP Level 7')],
+            }],
+            'certificate_claims': [{
+                'id': 'CC1', 'title': 'Ahli Teknik Jembatan', 'level': '7', 'inventory_id': 'C1',
+                'source_refs': [self.ref(1, 'Ahli Teknik Jembatan Level 7')],
             }],
             'certificate_extraction': {
                 'status': 'complete', 'identified_count': 1,

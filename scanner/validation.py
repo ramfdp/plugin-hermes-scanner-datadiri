@@ -1,7 +1,7 @@
 import copy
 import re
 from datetime import date
-from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids, canonical_text,
+from .evaluation import (AUDIT_CRITERIA, SERVER_AUDIT_CODES, assign_experience_ids, canonical_text,
                          evaluate_history_facts, partial_date, supported_period_months, validate_audit_checks)
 from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
                            validate_requirement_extension, validate_semantic_assessments)
@@ -522,11 +522,21 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
             if value is None:
                 record[field] = ''
         refs = source_refs(root, manifest, record.get('source_refs', []), required=True,
-                           kinds={'cv', 'attachment'}, page_classification=classification)
+                           kinds={'cv', 'attachment'} if stored else {'cv'}, page_classification=classification)
         own_refs(refs)
         support = source_refs(root, manifest, record.get('supporting_refs', []),
-                              kinds={'cv', 'attachment'}, page_classification=classification)
+                              kinds={'cv', 'attachment'},
+                              page_classification=classification)
+        if not stored and any(page_kind(classification, manifest, ref['document_id'], ref['page']) != 'attachment'
+                              for ref in support):
+            raise ValueError('education_records.supporting_refs harus berasal dari halaman attachment')
         own_refs(support)
+        record['claim_refs'] = [ref for ref in refs
+                                if page_kind(classification, manifest, ref['document_id'], ref['page']) == 'cv']
+        record['independent_supporting_refs'] = [
+            ref for ref in support
+            if page_kind(classification, manifest, ref['document_id'], ref['page']) == 'attachment'
+        ]
         evidence_text = normalized(" ".join(ref['quote'] for ref in [*refs, *support]))
         for field in ('level', 'major', 'institution', 'degree'):
             value = record.get(field)
@@ -581,6 +591,35 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
     if not certificates:
         require_text(person.get('certificate_limitation'), 'certificate_limitation')
     person['certificates'] = [certificate_result(root, manifest, cert, person['name'], assessment_date) for cert in certificates]
+    for cert in person['certificates']:
+        cert['independent_support'] = bool(cert.get('source_refs')) and all(
+            page_kind(classification, manifest, ref['document_id'], ref['page']) == 'attachment'
+            for ref in cert['source_refs']
+        )
+
+    certificate_claims = copy.deepcopy(records(person.get('certificate_claims', []), 'certificate_claims'))
+    unique(certificate_claims, 'id', 'certificate_claims')
+    mapped_inventory_ids = []
+    for claim in certificate_claims:
+        require_text(claim.get('title'), 'certificate_claims.title')
+        refs = source_refs(root, manifest, claim.get('source_refs', []), required=True,
+                           kinds={'cv'}, page_classification=classification)
+        own_refs(refs)
+        evidence_text = normalized(' '.join(ref['quote'] for ref in refs))
+        for field in ('title', 'number', 'level', 'issuer'):
+            value = claim.get(field, '')
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f'certificate_claims.{field} harus string atau null')
+            if isinstance(value, str) and value.strip() and normalized(value) not in evidence_text:
+                raise ValueError(f'certificate_claims.{field} tidak didukung kutipan CV')
+        inventory_id = claim.get('inventory_id')
+        if inventory_id is not None:
+            if inventory_id not in inventory:
+                raise ValueError('certificate_claims.inventory_id tidak ditemukan dalam certificate_inventory')
+            mapped_inventory_ids.append(inventory_id)
+    if len(mapped_inventory_ids) != len(set(mapped_inventory_ids)):
+        raise ValueError('Satu certificate_inventory tidak boleh memetakan lebih dari satu certificate_claims')
+    person['certificate_claims'] = certificate_claims
     certificate_extraction = person.get('certificate_extraction')
     if certificate_extraction is None:
         certificate_extraction = {
@@ -605,18 +644,45 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
             kinds={'cv'}, page_classification=classification,
         )
         own_refs(extraction_refs)
-        contradiction = (
-            certificate_extraction['status'] == 'complete' and count != len(inventory) or
-            certificate_extraction['status'] == 'no_certificates_declared' and
-            (inventory or canonical_text(person['identity'].get('certificate_summary', ''))) or
-            certificate_extraction['status'] == 'claimed_not_extracted' and not
-            canonical_text(person['identity'].get('certificate_summary', '')) or
-            certificate_extraction['status'] == 'partial' and
-            (count is None or count <= len(inventory))
-        )
+        status = certificate_extraction['status']
+        summary_claim = canonical_text(person['identity'].get('certificate_summary', ''))
+        contradiction = None
+        if status == 'no_certificates_declared':
+            cv_pages = {
+                (item['document_id'], page)
+                for item in plan['coverage'] if person['id'] in item.get('person_ids', [])
+                for page in range(item['first_page'], item['last_page'] + 1)
+                if page_kind(classification, manifest, item['document_id'], page) == 'cv'
+            }
+            reviewed_pages = {(ref['document_id'], ref['page']) for ref in extraction_refs}
+            if count != 0:
+                contradiction = 'certificate_extraction no_certificates_declared membutuhkan identified_count=0'
+            elif certificate_claims or inventory or summary_claim:
+                contradiction = 'certificate_extraction no_certificates_declared bertentangan dengan klaim atau inventory sertifikat'
+            elif not cv_pages.issubset(reviewed_pages):
+                contradiction = 'certificate_extraction no_certificates_declared membutuhkan bukti seluruh halaman CV personel'
+        elif status == 'complete':
+            if count != len(certificate_claims):
+                contradiction = 'certificate_extraction complete harus mencocokkan jumlah certificate_claims'
+            elif summary_claim and not certificate_claims:
+                contradiction = 'certificate_extraction complete membutuhkan certificate_claims terstruktur'
+            elif any(not claim.get('inventory_id') for claim in certificate_claims):
+                contradiction = 'certificate_extraction complete membutuhkan pemetaan setiap certificate_claims'
+            elif set(mapped_inventory_ids) != set(inventory):
+                contradiction = 'certificate_extraction complete harus merekonsiliasi seluruh certificate_inventory'
+        elif status == 'partial':
+            if count != len(certificate_claims) or not certificate_claims:
+                contradiction = 'certificate_extraction partial membutuhkan identified_count sesuai certificate_claims'
+            elif all(claim.get('inventory_id') for claim in certificate_claims):
+                contradiction = 'certificate_extraction partial membutuhkan klaim sertifikat yang belum terpetakan'
+        elif status == 'claimed_not_extracted':
+            if not summary_claim and not certificate_claims:
+                contradiction = 'certificate_extraction claimed_not_extracted membutuhkan klaim sertifikat yang didukung CV'
+            elif count is not None and count <= 0:
+                contradiction = 'certificate_extraction claimed_not_extracted membutuhkan identified_count positif atau null'
         if contradiction:
             if not stored:
-                raise ValueError('certificate_extraction bertentangan dengan klaim atau inventory sertifikat')
+                raise ValueError(contradiction)
             certificate_extraction.update(
                 status='unknown', identified_count=None,
                 analysis='Status ekstraksi sertifikat tersimpan bertentangan; ditafsirkan konservatif saat ekspor.',
@@ -671,16 +737,11 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
         source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,
                     page_classification=classification)
     person['audit_checks'] = audit_checks
-    structured_applicable = [check for check in person['audit_checks']
-                             if check.get('code') in KAK_MATCH_CODES and check.get('applicable')]
-    person['overall'] = (
-        'ada_kriteria_tidak_memenuhi' if any(check.get('status') == 'tidak_memenuhi' for check in structured_applicable) else
-        'perlu_klarifikasi' if any(check.get('status') == 'perlu_klarifikasi' for check in structured_applicable) else
-        'kriteria_diperiksa_memenuhi' if structured_applicable else
-        'tidak_ada_kriteria_KAK' if not checks else
-        'ada_kriteria_tidak_memenuhi' if any(check['status'] == 'tidak_memenuhi' for check in checks) else
-        'perlu_klarifikasi' if any(check['status'] == 'belum_dapat_dinilai' for check in checks) else
-        'kriteria_diperiksa_memenuhi')
+    person['overall'] = {
+        'tidak_memenuhi': 'ada_kriteria_tidak_memenuhi',
+        'perlu_klarifikasi': 'perlu_klarifikasi',
+        'memenuhi': 'kriteria_diperiksa_memenuhi',
+    }[person['final_conclusion']['status']]
     person['review_note'] = 'Hasil bantu pemeriksaan dokumen; bukan keputusan menerima/menolak personel.'
     return person
 

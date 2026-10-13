@@ -357,9 +357,18 @@ def certificate_details(requirements, role, certificates, extraction=None):
             finding = "Ada sertifikat, tetapi tidak ada kecocokan exact skema/jenjang/penerbit terhadap parameter KAK."
             clarification = "Konfirmasi ekuivalensi nama skema/jenjang/penerbit atau lampirkan sertifikat yang sesuai."
         else:
+            independently_supported = [cert for cert in candidates if cert.get("independent_support") is not False]
+            if not independently_supported:
+                rows.append(_detail(
+                    req, "perlu_klarifikasi",
+                    "Klaim sertifikat cocok, tetapi belum didukung dokumen sertifikat independen dari halaman lampiran.",
+                    "Klaim CV tetap dicatat; halaman CV tidak memverifikasi klaimnya sendiri.", refs,
+                    clarification="Lampirkan dan petakan dokumen sertifikat milik personel ini.",
+                ))
+                continue
             require_current = params.get("require_current", True)
             good, expired, unknown = [], [], []
-            for cert in candidates:
+            for cert in independently_supported:
                 validity = cert.get("validity", "tidak_diketahui")
                 if not require_current or validity == "belum_melewati_tanggal_akhir":
                     good.append(cert)

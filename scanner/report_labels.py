@@ -48,6 +48,7 @@ FIELD_LABELS = {
     'start_date': 'Tanggal mulai', 'end_date': 'Tanggal selesai',
     'level': 'Jenjang', 'degree': 'Gelar', 'major': 'Jurusan', 'institution': 'Institusi',
     'certificate_summary': 'Sertifikat yang disebutkan dalam CV',
+    'certificate': 'Sertifikat',
     'education': 'Pendidikan', 'education_records': 'Riwayat pendidikan',
     'employment_history': 'Riwayat pengalaman', 'supporting_facts': 'Informasi pada dokumen pendukung',
     'claimed_months': 'Lama pengalaman yang tercantum dalam CV',
