@@ -216,6 +216,29 @@ class EvidenceOwnershipTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'bukan milik'):
             review.dispatch({'action': 'save_person', 'run_id': self.rid, 'payload': p})
 
+    def test_separate_attachment_document_is_valid_employment_support(self):
+        p = person_payload(0)
+        p['employment_history'][0]['project'] = 'Skema Contoh'
+        p['employment_history'][0]['supporting_refs'] = [
+            {'document_id': 'D003', 'page': 1, 'quote': CERT_PAGES[0]},
+        ]
+        p['employment_history'][0]['supporting_facts'] = [{
+            'project': 'Skema Contoh', 'strict_evidence': True,
+            'source_refs': [{'document_id': 'D003', 'page': 1, 'quote': CERT_PAGES[0]}],
+        }]
+        result = review.dispatch({'action': 'save_person', 'run_id': self.rid, 'payload': p})
+        self.assertIn('overall', result)
+
+    def test_other_person_attachment_cannot_support_employment(self):
+        p = person_payload(0)
+        p['employment_history'][0]['project'] = 'Skema Contoh'
+        p['employment_history'][0]['supporting_facts'] = [{
+            'project': 'Skema Contoh', 'strict_evidence': True,
+            'source_refs': [{'document_id': 'D003', 'page': 2, 'quote': CERT_PAGES[1]}],
+        }]
+        with self.assertRaisesRegex(ValueError, 'bukan milik'):
+            review.dispatch({'action': 'save_person', 'run_id': self.rid, 'payload': p})
+
     def test_certificate_values_cannot_be_invented_from_web(self):
         p = person_payload(0); p['certificates'][0]['number'] = 'INVENTED-003'
         with self.assertRaisesRegex(ValueError, 'tidak didukung'):
@@ -230,8 +253,8 @@ class EvidenceOwnershipTest(unittest.TestCase):
     def test_exact_period_crossing_cutoff_preserves_elapsed_months(self):
         from datetime import date
         value = chronology([{
-            'start_date': '2026-01', 'end_date': '2026-12', 'relevant': True,
-            'supporting_facts': [{'start_date': '2026-01', 'end_date': '2026-12',
+            'project': 'Project Alpha', 'start_date': '2026-01', 'end_date': '2026-12', 'relevant': True,
+            'supporting_facts': [{'project': 'Project Alpha', 'start_date': '2026-01', 'end_date': '2026-12',
                                   'source_refs': [{'document_id': 'D', 'page': 1, 'quote': '2026-01 2026-12'}]}],
         }], date(2026, 9, 23))
         self.assertEqual(value['calendar_months_unique'], 8)
@@ -242,15 +265,15 @@ class EvidenceOwnershipTest(unittest.TestCase):
 
     def test_supported_duration_requires_complete_period_evidence(self):
         from datetime import date
-        base = {'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True}
+        base = {'project': 'Project Alpha', 'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True}
         cases = [
             ({'project': 'Project Alpha'}, 0),
             ({'start_date': '2020-01'}, 0),
             ({'end_date': '2021-12'}, 0),
-            ({'start_date': '2021-01', 'end_date': '2021-12'}, 12),
-            ({'start_date': '2018-01', 'end_date': '2019-12'}, 0),
-            ({'start_date': '2020', 'end_date': '2021'}, 0),
-            ({'start_date': '2020-01', 'end_date': '2021-12'}, 24),
+            ({'project': 'Project Alpha', 'start_date': '2021-01', 'end_date': '2021-12'}, 12),
+            ({'project': 'Project Alpha', 'start_date': '2018-01', 'end_date': '2019-12'}, 0),
+            ({'project': 'Project Alpha', 'start_date': '2020', 'end_date': '2021'}, 0),
+            ({'project': 'Project Alpha', 'start_date': '2020-01', 'end_date': '2021-12'}, 24),
         ]
         for fact, expected in cases:
             with self.subTest(fact=fact):
@@ -262,10 +285,38 @@ class EvidenceOwnershipTest(unittest.TestCase):
     def test_supported_duration_unions_multiple_period_facts_without_double_counting(self):
         from datetime import date
         result = chronology([{
-            'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True,
+            'project': 'Project Alpha', 'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True,
             'supporting_facts': [
-                {'start_date': '2020-01', 'end_date': '2020-12', 'source_refs': []},
-                {'start_date': '2020-07', 'end_date': '2021-06', 'source_refs': []},
+                {'project': 'Project Alpha', 'start_date': '2020-01', 'end_date': '2020-12', 'source_refs': []},
+                {'project': 'Project Alpha', 'start_date': '2020-07', 'end_date': '2021-06', 'source_refs': []},
             ],
         }], date(2026, 9, 30))
         self.assertEqual(result['supported_relevant_months'], 18)
+
+    def test_supported_duration_requires_matching_identity_without_contradictions(self):
+        from datetime import date
+        base = {'project': 'Project Alpha', 'employer': 'PT Alpha', 'role': 'Site Engineer',
+                'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True}
+        cases = [
+            ({'start_date': '2020-01', 'end_date': '2021-12'}, 0),
+            ({'project': 'Project Beta', 'start_date': '2020-01', 'end_date': '2021-12'}, 0),
+            ({'employer': 'PT Beta', 'start_date': '2020-01', 'end_date': '2021-12'}, 0),
+            ({'project': 'Project Alpha', 'employer': 'PT Beta',
+              'start_date': '2020-01', 'end_date': '2021-12'}, 0),
+            ({'project': 'Project Alpha', 'start_date': '2021-01', 'end_date': '2021-12'}, 12),
+            ({'employer': 'PT Alpha', 'start_date': '2020-01', 'end_date': '2020-12'}, 12),
+        ]
+        for fact, expected in cases:
+            with self.subTest(fact=fact):
+                result = chronology([{**base, 'supporting_facts': [fact]}], date(2026, 9, 30))
+                self.assertEqual(result['supported_relevant_months'], expected)
+
+    def test_missing_attachment_preserves_calculable_cv_duration(self):
+        from datetime import date
+        result = chronology([{
+            'project': 'Project Alpha', 'start_date': '2020-01', 'end_date': '2021-12',
+            'relevant': True, 'supporting_refs': [], 'supporting_facts': [],
+        }], date(2026, 9, 30))
+        self.assertEqual(result['calendar_months_unique'], 24)
+        self.assertEqual(result['relevant_months'], 24)
+        self.assertEqual(result['supported_relevant_months'], 0)

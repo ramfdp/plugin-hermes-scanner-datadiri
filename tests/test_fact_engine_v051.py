@@ -95,8 +95,8 @@ class FactEngineV051Test(unittest.TestCase):
                  'supporting_refs': [self.ref(2, 'SURAT REFERENSI A')],
                  'supporting_facts': [{
                      'project': 'Project Alpha', 'employer': 'PT Contoh', 'role': 'Engineer',
-                     'start_date': '2020-01', 'end_date': '2020-12',
-                     'source_refs': [self.ref(2, 'Project Alpha')],
+                     'start_date': '2020-01', 'end_date': '2020-12', 'strict_evidence': True,
+                     'source_refs': [self.ref(2, 'Project Alpha PT Contoh Engineer 2020-01 sampai 2020-12')],
                  }]},
                 {'employer': 'PT Contoh', 'role': 'Engineer', 'project': 'Project Beta',
                  'start_date': '2020-07', 'end_date': '2021-06', 'relevant': True,
@@ -105,8 +105,8 @@ class FactEngineV051Test(unittest.TestCase):
                  'supporting_refs': [self.ref(4, 'SURAT REFERENSI B')],
                  'supporting_facts': [{
                      'project': 'Project Beta', 'employer': 'PT Contoh', 'role': 'Engineer',
-                     'start_date': '2020-07', 'end_date': '2021-06',
-                     'source_refs': [self.ref(4, 'Project Beta')],
+                     'start_date': '2020-07', 'end_date': '2021-06', 'strict_evidence': True,
+                     'source_refs': [self.ref(4, 'Project Beta PT Contoh Engineer 2020-07 sampai 2021-06')],
                  }]},
             ],
             'employer_checks': [{'employer': 'PT Contoh',

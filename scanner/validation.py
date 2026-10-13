@@ -347,6 +347,16 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
             ):
                 raise ValueError('Bukti halaman bukan milik personel menurut coverage')
 
+    def employment_support_refs(refs, *, required=False):
+        validated = source_refs(root, manifest, refs, required=required, kinds={'cv', 'attachment'},
+                                page_classification=classification)
+        if not stored and any(
+            page_kind(classification, manifest, ref.get('document_id'), ref.get('page')) != 'attachment'
+            for ref in validated
+        ):
+            raise ValueError('bukti pendukung pengalaman harus berasal dari halaman attachment')
+        return validated
+
     for group in ('checks', 'employment_history', 'certificates'):
         for row in records(person.get(group, []), group):
             own_refs(row.get('source_refs', []))
@@ -389,8 +399,7 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
                 job[field] = ''
         source_refs(root, manifest, job.get('source_refs', []), required=True, kinds={'cv'},
                     page_classification=classification)
-        source_refs(root, manifest, job.get('supporting_refs', []), kinds={'cv', 'attachment'},
-                    page_classification=classification)
+        employment_support_refs(job.get('supporting_refs', []))
         supporting_facts = records(job.get('supporting_facts', []), 'supporting_facts')
         for fact in supporting_facts:
             if not any(isinstance(fact.get(field), str) and fact.get(field).strip()
@@ -401,13 +410,18 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
                 value = fact.get(field)
                 if value is not None and not isinstance(value, str):
                     raise ValueError(f'supporting_facts.{field} harus string atau null')
-            refs = source_refs(root, manifest, fact.get('source_refs', []), required=True,
-                               kinds={'cv', 'attachment'}, page_classification=classification)
+            refs = employment_support_refs(fact.get('source_refs', []), required=True)
             own_refs(refs)
             strict_evidence = fact.get('strict_evidence', False)
             if not isinstance(strict_evidence, bool):
                 raise ValueError('supporting_facts.strict_evidence harus boolean')
+            if not stored and not strict_evidence:
+                raise ValueError('supporting_facts run baru wajib strict_evidence=true')
             fact['strict_evidence'] = strict_evidence
+            fact['independent_support'] = all(
+                page_kind(classification, manifest, ref.get('document_id'), ref.get('page')) == 'attachment'
+                for ref in refs
+            )
             if strict_evidence:
                 evidence_text = normalized(" ".join(ref['quote'] for ref in refs))
                 for field in ('project', 'employer', 'role', 'client', 'consultant', 'contractor',

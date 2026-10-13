@@ -220,11 +220,52 @@ class KakMatchingV060Test(unittest.TestCase):
         stored = storage.load(storage.run_dir(rid) / 'people/P1.json')
         self.assertTrue(stored['employment_history'][0]['relevant'])
         self.assertEqual(stored['chronology']['relevant_months'], 24)
+        self.assertEqual(stored['chronology']['supported_relevant_months'], 24)
         self.assertEqual(len(stored['semantic_assessments']), 5)
         self.assertEqual(len(stored['kak_match_details']), 8)
 
         snapshot = review.snapshot(storage.run_dir(rid))
         self.assertFalse(any('tidak ada kriteria KAK yang cocok' in item for item in snapshot['limitations']))
+
+    def test_cv_page_cannot_be_reused_as_employment_support(self):
+        rid = self.prepare_run()
+        person = self.person_payload()
+        fact = person['employment_history'][0]['supporting_facts'][0]
+        fact['source_refs'] = [self.ref(1, 'Proyek Jembatan Sungai')]
+        fact['strict_evidence'] = False
+        with self.assertRaisesRegex(ValueError, 'bukti pendukung pengalaman harus berasal dari halaman attachment'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_combined_pdf_attachment_page_supports_employment_period(self):
+        rid = self.prepare_run()
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person_payload()})
+        stored = storage.load(storage.run_dir(rid) / 'people/P1.json')
+        self.assertEqual(stored['chronology']['supported_relevant_months'], 24)
+        plan = storage.load(storage.run_dir(rid) / 'plan.json')
+        self.assertEqual(len(storage.load(storage.run_dir(rid) / 'manifest.json')['documents']), 1)
+        self.assertEqual(next(row['kind'] for row in plan['page_classification'] if row['first_page'] == 1), 'cv')
+        self.assertEqual(next(row['kind'] for row in plan['page_classification'] if row['first_page'] == 5), 'attachment')
+
+    def test_legacy_cv_supporting_fact_exports_without_counting_independent_support(self):
+        rid = self.prepare_run()
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person_payload()})
+        path = storage.run_dir(rid) / 'people/P1.json'
+        legacy = storage.load(path)
+        legacy['employment_history'][0]['supporting_facts'][0].update(
+            strict_evidence=False,
+            source_refs=[self.ref(1, 'Proyek Jembatan Sungai')],
+        )
+        storage.save(path, legacy)
+        before = storage.load(path)
+        snapshot = review.snapshot(storage.run_dir(rid))
+        self.assertEqual(snapshot['people'][0]['chronology']['supported_relevant_months'], 0)
+        period = next(row for row in snapshot['people'][0]['audit_checks']
+                      if row['code'] == 'project_period_accuracy')
+        self.assertEqual(period['status'], 'perlu_klarifikasi')
+        self.assertEqual(storage.load(path), before)
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+        self.assertEqual(len(exported['artifacts']), 2)
 
     def test_wildcard_role_applies_to_any_role(self):
         requirement = {'role': '*'}
@@ -350,6 +391,34 @@ class KakMatchingV060Test(unittest.TestCase):
             'history_extraction': {'status': 'partially_extracted'}, 'relevance_assessed': True,
         })[0]
         self.assertEqual(detail['status'], 'memenuhi')
+
+    def test_bound_partial_period_only_satisfies_the_supported_lower_bound(self):
+        from datetime import date
+        from scanner.validation import chronology
+
+        history = [{
+            'id': 'E001', 'project': 'Project Alpha', 'employer': 'PT Alpha', 'role': 'Engineer',
+            'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True,
+            'source_refs': [], 'supporting_refs': [],
+            'supporting_facts': [{
+                'project': 'Project Alpha', 'start_date': '2021-01', 'end_date': '2021-12',
+                'source_refs': [],
+            }],
+        }]
+        timeline = chronology(history, date(2026, 9, 30))
+        requirements = [
+            {'id': 'D12', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+             'text': 'Minimal 12 bulan', 'minimum_months': 12, 'source_refs': []},
+            {'id': 'D24', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+             'text': 'Minimal 24 bulan', 'minimum_months': 24, 'source_refs': []},
+        ]
+        details = duration_details(requirements, 'Engineer', history, timeline, {
+            'history_extraction': {'status': 'complete'}, 'relevance_assessed': True,
+        })
+        self.assertEqual(timeline['supported_relevant_months'], 12)
+        self.assertEqual({row['requirement_id']: row['status'] for row in details}, {
+            'D12': 'memenuhi', 'D24': 'perlu_klarifikasi',
+        })
 
     def test_missing_evaluation_context_is_conservative(self):
         requirement = {'id': 'D', 'role': 'Engineer', 'audit_code': 'experience_duration_match',

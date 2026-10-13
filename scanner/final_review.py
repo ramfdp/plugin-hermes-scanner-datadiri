@@ -78,7 +78,8 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
     # Employment/project claims versus structured facts extracted from attachments.
     for job in history:
         job_id = job.get("id")
-        facts = job.get("supporting_facts", [])
+        facts = [fact for fact in job.get("supporting_facts", [])
+                 if fact.get("independent_support") is not False]
         row = {"type": "experience", "experience_id": job_id, "fields": []}
         all_refs.extend(job.get("source_refs", []))
         all_refs.extend(job.get("supporting_refs", []))

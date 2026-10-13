@@ -206,11 +206,35 @@ def period_months(start_value, end_value, as_of=None):
     return set(range(first, last + 1)) if last >= first else set()
 
 
+EXPERIENCE_IDENTITY_FIELDS = (
+    "project", "employer", "role", "client", "consultant", "contractor", "represented_organization",
+)
+
+
+def supporting_fact_bound(job, fact):
+    """Require one exact identity anchor and reject every explicit contradiction."""
+    if fact.get("independent_support") is False:
+        return False
+    matched = False
+    for field in EXPERIENCE_IDENTITY_FIELDS:
+        fact_value = canonical_text(fact.get(field))
+        if not fact_value:
+            continue
+        job_value = canonical_text(job.get(field))
+        if not job_value:
+            continue
+        if fact_value != job_value:
+            return False
+        matched = True
+    return matched
+
+
 def supported_period_months(job, as_of=None):
     claimed = period_months(job.get("start_date"), job.get("end_date"), as_of)
     supported = set()
     for fact in _supporting_facts(job):
-        supported |= claimed & period_months(fact.get("start_date"), fact.get("end_date"), as_of)
+        if supporting_fact_bound(job, fact):
+            supported |= claimed & period_months(fact.get("start_date"), fact.get("end_date"), as_of)
     return supported
 
 
@@ -275,7 +299,7 @@ def _not_applicable(code, finding):
 
 def _supporting_facts(job):
     value = job.get("supporting_facts", [])
-    return value if isinstance(value, list) else []
+    return [fact for fact in value if fact.get("independent_support") is not False] if isinstance(value, list) else []
 
 
 def evaluate_period_accuracy(history, as_of):
@@ -323,6 +347,11 @@ def evaluate_period_accuracy(history, as_of):
         complete_support = False
         for fact in period_facts:
             result = {"source_refs": copy.deepcopy(fact.get("source_refs", [])), "matches": {}}
+            bound = supporting_fact_bound(job, fact)
+            result["identity_bound"] = bound
+            if not bound:
+                issues.append({"experience_id": job["id"], "type": "support_identity_unbound",
+                               "detail": "Bukti periode tidak memiliki anchor identitas yang cocok tanpa kontradiksi."})
             for field in ("start_date", "end_date"):
                 value = fact.get(field)
                 if value:
@@ -330,7 +359,8 @@ def evaluate_period_accuracy(history, as_of):
                     if not result["matches"][field]:
                         issues.append({"experience_id": job["id"], "type": "period_conflict",
                                        "field": field, "cv_value": job.get(field), "support_value": value})
-            if fact.get("start_date") and fact.get("end_date") and all(result["matches"].values()):
+            if (bound and fact.get("start_date") and fact.get("end_date") and
+                    all(result["matches"].values())):
                 complete_support = True
             entry["support"].append(result)
         if period_facts and not complete_support:

@@ -66,6 +66,11 @@ dokumen induknya. Untuk Desktop satu-PDF v0.5, field ini wajib disusun agar hala
 tetap dapat menjadi bukti requirement. Halaman KAK/addendum pada coverage memakai `person_ids:[]` dan
 `reason:"reference"`; halaman tersebut tidak boleh dimiliki personel.
 
+Jenis bukti mengikuti halaman, bukan file fisik. Satu PDF dapat memakai `document_id` yang sama untuk
+halaman `cv`, `attachment`, `kak`, dan `addendum`. `employment_history.source_refs` hanya menunjuk halaman
+`cv`; `employment_history.supporting_refs` dan `supporting_facts.source_refs` hanya menunjuk halaman
+`attachment`. Dengan demikian klaim CV tidak dapat menjadi bukti independen bagi dirinya sendiri.
+
 Setiap halaman CV/lampiran wajib tercakup. Halaman tak terkait lain: `person_ids:[]` dengan
 `reason` `blank`, `cover`, `unassigned`, atau `unreadable`. Dua alasan terakhir membuat laporan parsial.
 Seluruh sertifikat harus ada di `certificate_inventory`, termasuk yang tidak terbaca jelas.
@@ -148,6 +153,9 @@ Hasil portal boleh ditambahkan melalui receipt_id + quote. Keberadaan perusahaan
 Tanggal riwayat harus persis presisi yang tersedia: YYYY, YYYY-MM atau YYYY-MM-DD; jangan mengarang bulan.
 Hitungan server hanya indikator bulan kalender inklusif untuk YYYY-MM dan tidak menghitung overlap dua kali.
 Tanggal presisi lain ditandai belum dihitung. Ini bukan rumus pemenuhan KAK otomatis.
+Durasi didukung hanya bila fakta lampiran memiliki tanggal mulai+akhir dan minimal satu anchor identitas
+(`project`, `employer`, `role`, `client`, `consultant`, `contractor`, atau `represented_organization`)
+yang cocok tanpa kontradiksi pada anchor lain yang terisi. Tanggal tanpa anchor tidak mendukung durasi.
 
 ### export
 
