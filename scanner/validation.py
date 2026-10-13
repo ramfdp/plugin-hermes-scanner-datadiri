@@ -2,7 +2,7 @@ import copy
 import re
 from datetime import date
 from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids,
-                         evaluate_history_facts, partial_date, validate_audit_checks)
+                         evaluate_history_facts, partial_date, supported_period_months, validate_audit_checks)
 from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
                            validate_requirement_extension, validate_semantic_assessments)
 from .final_review import finalize_person_review
@@ -247,8 +247,7 @@ def chronology(history, as_of=None):
         all_months |= months
         if job.get("relevant") is True:
             relevant |= months
-            if job.get("supporting_refs") or job.get("supporting_facts"):
-                supported |= months
+            supported |= supported_period_months(job, as_of)
     return {
         "calendar_months_unique": len(all_months),
         "relevant_months": len(relevant),
@@ -362,8 +361,7 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
     claimed = identity.get('claimed_months')
     if claimed is not None and (type(claimed) is not int or claimed < 0):
         raise ValueError("claimed_months harus integer >= 0 atau null")
-    applicable_requirements = {r['id']: r for r in plan['requirements']
-                               if r['role'] == '*' or normalized(r['role']) == normalized(roster['role'])}
+    applicable_requirements = {r['id']: r for r in plan['requirements'] if applicable(r, roster['role'])}
     legacy_required = {rid: requirement for rid, requirement in applicable_requirements.items()
                        if not requirement.get('audit_code')}
     checks = records(person.get('checks'), 'checks')
@@ -566,7 +564,9 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
 
     audit_checks = finalize_person_review(person, list(applicable_requirements.values()), plan['kak'], audit_checks, checks)
     for check in audit_checks:
-        require_evidence = check.get('applicable', True) and check.get('status') in {'memenuhi', 'tidak_memenuhi'}
+        require_evidence = (check.get('applicable', True) and
+                            check.get('status') in {'memenuhi', 'tidak_memenuhi'} and
+                            check.get('candidate_evidence_required', True))
         source_refs(root, manifest, check.get('source_refs', []), required=require_evidence)
         own_refs(check.get('source_refs', []))
         source_refs(root, manifest, check.get('kak_refs', []), kinds=REFERENCE_PAGE_KINDS,

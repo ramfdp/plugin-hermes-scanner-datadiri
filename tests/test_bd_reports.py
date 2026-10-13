@@ -360,6 +360,8 @@ class BDExportTest(unittest.TestCase):
         self.assertIn('B003 | CV Contoh.pdf, halaman 1:', text)
         self.assertGreaterEqual(text.count('B001'), 2)
         self.assertGreaterEqual(text.count('B003'), 2)
+        second_pdf, _ = self.export()
+        self.assertEqual(text, ' '.join(pdf_text(second_pdf).split()))
 
     def test_pdf_does_not_reference_hidden_detailed_kak_section(self):
         person = self.data['people'][0]

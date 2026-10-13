@@ -9,7 +9,7 @@ from unittest.mock import patch
 from openpyxl import load_workbook
 
 from scanner import review, storage
-from scanner.kak_matching import certificate_details, duration_details, education_details
+from scanner.kak_matching import applicable, certificate_details, duration_details, education_details
 
 
 class KakMatchingV060Test(unittest.TestCase):
@@ -226,6 +226,57 @@ class KakMatchingV060Test(unittest.TestCase):
         snapshot = review.snapshot(storage.run_dir(rid))
         self.assertFalse(any('tidak ada kriteria KAK yang cocok' in item for item in snapshot['limitations']))
 
+    def test_wildcard_role_applies_to_any_role(self):
+        requirement = {'role': '*'}
+        self.assertTrue(applicable(requirement, 'Engineer'))
+        self.assertTrue(applicable(requirement, 'Arsitek'))
+        self.assertTrue(applicable({'role': 'Engineer'}, 'Engineer'))
+        self.assertFalse(applicable({'role': 'Engineer'}, 'Arsitek'))
+
+    def test_wildcard_duration_requirement_survives_save_snapshot_and_export(self):
+        def wildcard_duration(plan):
+            next(row for row in plan['requirements'] if row['id'] == 'R5')['role'] = '*'
+
+        rid = self.prepare_run(wildcard_duration)
+        saved = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person_payload()})
+        self.assertEqual(
+            next(row for row in saved['audit_checks'] if row['code'] == 'experience_duration_match')['status'],
+            'memenuhi',
+        )
+        snapshot = review.snapshot(storage.run_dir(rid))
+        self.assertEqual(
+            next(row for row in snapshot['people'][0]['kak_match_details'] if row['requirement_id'] == 'R5')['status'],
+            'memenuhi',
+        )
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+        self.assertEqual(len(exported['artifacts']), 2)
+
+    def test_complete_review_with_zero_relevant_months_exports_failure_with_evidence(self):
+        rid = self.prepare_run(minimum_months=60)
+        person = self.person_payload()
+        position = next(row for row in person['semantic_assessments'] if row['requirement_id'] == 'R1')
+        position.update(status='tidak_memenuhi', finding='Pengalaman tidak relevan dengan posisi KAK.')
+        person['history_extraction'] = {
+            'status': 'complete', 'identified_count': 1,
+            'analysis': 'Seluruh pengalaman pada CV telah dipetakan dan diperiksa terhadap posisi KAK.',
+            'source_refs': [self.ref(1, 'Proyek Jembatan Sungai')],
+        }
+        saved = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        duration = next(row for row in saved['audit_checks'] if row['code'] == 'experience_duration_match')
+        self.assertEqual(duration['status'], 'tidak_memenuhi')
+        stored = storage.load(storage.run_dir(rid) / 'people/P1.json')
+        stored_duration = next(row for row in stored['audit_checks'] if row['code'] == 'experience_duration_match')
+        self.assertTrue(stored_duration['source_refs'])
+        self.assertEqual(saved['final_conclusion']['status'], 'tidak_memenuhi')
+        self.assertEqual(
+            review.snapshot(storage.run_dir(rid))['people'][0]['final_conclusion']['status'],
+            'tidak_memenuhi',
+        )
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+        self.assertEqual(len(exported['artifacts']), 2)
+
     def test_export_contains_matching_and_education_sheets(self):
         rid = self.prepare_run()
         review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person_payload()})
@@ -316,6 +367,29 @@ class KakMatchingV060Test(unittest.TestCase):
         })[0]
         self.assertEqual(detail['status'], 'memenuhi')
         self.assertIn('bukan bukti', detail['finding'])
+        self.assertFalse(detail['candidate_evidence_required'])
+
+    def test_zero_month_requirement_survives_validation_and_export_without_claiming_verification(self):
+        def duration_only(plan):
+            plan['requirements'] = [row for row in plan['requirements'] if row['id'] == 'R5']
+            plan['roster'][0]['certificate_inventory'] = []
+
+        rid = self.prepare_run(duration_only, minimum_months=0)
+        person = self.person_payload()
+        person.update(
+            identity={'education': '', 'certificate_summary': '', 'claimed_months': 0, 'nik': ''},
+            employment_history=[], education_records=[], semantic_assessments=[], employer_checks=[], certificates=[],
+            certificate_limitation='Tidak ada sertifikat yang dipetakan karena requirement ini hanya menetapkan ambang durasi nol.',
+        )
+        saved = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        stored = storage.load(storage.run_dir(rid) / 'people/P1.json')
+        detail = next(row for row in stored['kak_match_details'] if row['requirement_id'] == 'R5')
+        self.assertEqual(detail['status'], 'memenuhi')
+        self.assertIn('bukan bukti', detail['finding'])
+        self.assertFalse(detail['candidate_evidence_required'])
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], (saved, exported))
+        self.assertEqual(len(exported['artifacts']), 2)
 
     def test_partial_history_below_kak_minimum_stays_clarification_through_export(self):
         rid = self.prepare_run(minimum_months=60)

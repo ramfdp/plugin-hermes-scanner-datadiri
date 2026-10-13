@@ -16,8 +16,8 @@ LEVEL_RANK = {
 
 
 def applicable(requirement, role):
-    value = canonical_text(requirement.get("role"))
-    return value == "*" or value == canonical_text(role)
+    value = requirement.get("role")
+    return value == "*" or canonical_text(value) == canonical_text(role)
 
 
 def _list_text(value, label):
@@ -184,6 +184,7 @@ def _aggregate(code, details):
         "analysis": f"Hasil agregat {label}; lihat kak_match_details untuk analisis per requirement.",
         "source_refs": _unique_refs([ref for item in details for ref in item.get("source_refs", [])]),
         "kak_refs": _unique_refs([ref for item in details for ref in item.get("kak_refs", [])]),
+        "candidate_evidence_required": any(item.get("candidate_evidence_required", True) for item in details),
         "computed": True,
     }
     if status == "perlu_klarifikasi":
@@ -191,7 +192,8 @@ def _aggregate(code, details):
     return check
 
 
-def _detail(requirement, status, finding, analysis, source_refs, *, experience_ids=None, clarification=""):
+def _detail(requirement, status, finding, analysis, source_refs, *, experience_ids=None, clarification="",
+            candidate_evidence_required=True):
     item = {
         "requirement_id": requirement["id"],
         "code": requirement["audit_code"],
@@ -202,6 +204,7 @@ def _detail(requirement, status, finding, analysis, source_refs, *, experience_i
         "source_refs": _unique_refs(source_refs),
         "kak_refs": copy.deepcopy(requirement.get("source_refs", [])),
         "requirement_text": requirement["text"],
+        "candidate_evidence_required": candidate_evidence_required,
         "computed": True,
     }
     if status == "perlu_klarifikasi":
@@ -229,7 +232,6 @@ def duration_details(requirements, role, history, chronology, evaluation_context
     relevant = chronology.get("relevant_months", 0)
     supported = chronology.get("supported_relevant_months", 0)
     uncertain = chronology.get("uncertain_entries", [])
-    refs = _history_refs(history, relevant_only=True)
     for req in requirements:
         if req.get("audit_code") != "experience_duration_match" or not applicable(req, role):
             continue
@@ -239,23 +241,32 @@ def duration_details(requirements, role, history, chronology, evaluation_context
             finding = ("Minimum KAK adalah 0 bulan; ambang numerik terpenuhi. "
                        "Hasil ini bukan bukti bahwa pengalaman kerja telah diverifikasi.")
             clarification = ""
+            refs = []
+            candidate_evidence_required = False
         elif relevance_assessed and relevant >= minimum and supported >= minimum:
             status = "memenuhi"
             finding = f"Pengalaman relevan {relevant} bulan dan didukung {supported} bulan; minimum KAK {minimum} bulan."
             clarification = ""
+            refs = _history_refs(history, relevant_only=True)
+            candidate_evidence_required = True
         elif relevance_assessed and extraction_status == "complete" and relevant < minimum and not uncertain:
             status = "tidak_memenuhi"
             finding = f"Pengalaman relevan {relevant} bulan, di bawah minimum KAK {minimum} bulan."
             clarification = ""
+            refs = _history_refs(history)
+            candidate_evidence_required = True
         else:
             status = "perlu_klarifikasi"
             finding = (f"Pengalaman relevan {relevant} bulan, didukung {supported} bulan, minimum KAK {minimum} bulan; "
                        f"{len(uncertain)} entri belum dapat dihitung penuh. Cakupan ekstraksi atau penilaian relevansi belum cukup untuk menetapkan kekurangan durasi.")
             clarification = "Lengkapi pemetaan, penilaian relevansi, periode, atau bukti pengalaman sebelum menetapkan durasi yang dapat dipakai."
+            refs = _history_refs(history, relevant_only=True)
+            candidate_evidence_required = True
         rows.append(_detail(
             req, status, finding,
             "Durasi memakai union bulan kalender pengalaman yang ditandai relevan; overlap tidak dihitung dua kali.",
             refs, clarification=clarification,
+            candidate_evidence_required=candidate_evidence_required,
         ))
     return rows
 

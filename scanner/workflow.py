@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 from . import __version__, review, storage
+from .kak_matching import applicable
 from .validation import records, source_refs, validate_plan
 from .web import normalized
 
@@ -88,7 +89,7 @@ def create_summary(root, manifest, payload):
     for person in plan['roster']:
         identity = mapped[person['id']]['identity']
         minimums = [r['minimum_months'] for r in plan['requirements'] if r['kind'] == 'experience' and
-                    r.get('minimum_months') is not None and normalized(r['role']) in ('*', normalized(person['role']))]
+                    r.get('minimum_months') is not None and applicable(r, person['role'])]
         personel.append({'nama_personel': person['name'], 'nik': identity['nik'], 'jabatan_personel': person['role'],
             'kualifikasi_pendidikan': identity['education'], 'sertifikat_keahlian': identity['certificate_summary'],
             'pengalaman_kerja_bulan': identity['claimed_months'],

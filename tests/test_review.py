@@ -231,10 +231,41 @@ class EvidenceOwnershipTest(unittest.TestCase):
         from datetime import date
         value = chronology([{
             'start_date': '2026-01', 'end_date': '2026-12', 'relevant': True,
-            'supporting_refs': [{'document_id': 'D', 'page': 1, 'quote': 'support'}],
+            'supporting_facts': [{'start_date': '2026-01', 'end_date': '2026-12',
+                                  'source_refs': [{'document_id': 'D', 'page': 1, 'quote': '2026-01 2026-12'}]}],
         }], date(2026, 9, 23))
         self.assertEqual(value['calendar_months_unique'], 8)
         self.assertEqual(value['relevant_months'], 8)
         self.assertEqual(value['supported_relevant_months'], 8)
         self.assertEqual(value['calculable_entries'], 1)
         self.assertEqual(value['uncertain_entries'], [1])
+
+    def test_supported_duration_requires_complete_period_evidence(self):
+        from datetime import date
+        base = {'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True}
+        cases = [
+            ({'project': 'Project Alpha'}, 0),
+            ({'start_date': '2020-01'}, 0),
+            ({'end_date': '2021-12'}, 0),
+            ({'start_date': '2021-01', 'end_date': '2021-12'}, 12),
+            ({'start_date': '2018-01', 'end_date': '2019-12'}, 0),
+            ({'start_date': '2020', 'end_date': '2021'}, 0),
+            ({'start_date': '2020-01', 'end_date': '2021-12'}, 24),
+        ]
+        for fact, expected in cases:
+            with self.subTest(fact=fact):
+                fact['source_refs'] = [{'document_id': 'D', 'page': 1, 'quote': 'period evidence'}]
+                result = chronology([{**base, 'supporting_facts': [fact]}], date(2026, 9, 30))
+                self.assertEqual(result['calendar_months_unique'], 24)
+                self.assertEqual(result['supported_relevant_months'], expected)
+
+    def test_supported_duration_unions_multiple_period_facts_without_double_counting(self):
+        from datetime import date
+        result = chronology([{
+            'start_date': '2020-01', 'end_date': '2021-12', 'relevant': True,
+            'supporting_facts': [
+                {'start_date': '2020-01', 'end_date': '2020-12', 'source_refs': []},
+                {'start_date': '2020-07', 'end_date': '2021-06', 'source_refs': []},
+            ],
+        }], date(2026, 9, 30))
+        self.assertEqual(result['supported_relevant_months'], 18)

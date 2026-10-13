@@ -192,6 +192,28 @@ def date_values_compatible(left, right):
     return max(a["first"], b["first"]) <= min(a["last"], b["last"])
 
 
+def period_months(start_value, end_value, as_of=None):
+    """Return defensible calendar months without inventing year precision."""
+    start, end = partial_date(start_value), partial_date(end_value)
+    if (not start["valid"] or not end["valid"] or
+            start["precision"] == "year" or end["precision"] == "year" or
+            start["first"] > end["last"]):
+        return set()
+    first = start["first"].year * 12 + start["first"].month - 1
+    last = end["last"].year * 12 + end["last"].month - 1
+    if as_of is not None:
+        last = min(last, as_of.year * 12 + as_of.month - 2)
+    return set(range(first, last + 1)) if last >= first else set()
+
+
+def supported_period_months(job, as_of=None):
+    claimed = period_months(job.get("start_date"), job.get("end_date"), as_of)
+    supported = set()
+    for fact in _supporting_facts(job):
+        supported |= claimed & period_months(fact.get("start_date"), fact.get("end_date"), as_of)
+    return supported
+
+
 def _unique_refs(values):
     result, seen = [], set()
     for ref in values:
