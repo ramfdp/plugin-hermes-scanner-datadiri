@@ -72,6 +72,7 @@ def snapshot_fixture():
                               'finding': 'Pengalaman relevan 24 bulan dan didukung 24 bulan; minimum KAK 12 bulan.',
                               'analysis': 'Durasi memakai union bulan kalender pengalaman yang ditandai relevan; overlap tidak dihitung dua kali.',
                               'source_refs': [ref], 'kak_refs': [kak_ref], 'computed': True}],
+        'relevance_assessment': {'status': 'complete'},
         'education_records': [{'level': 'S1', 'degree': 'Sarjana Teknik', 'major': 'Teknik Sipil',
                                'institution': 'Universitas Contoh', 'source_refs': [ref], 'supporting_refs': []}],
         'chronology': {'calendar_months_unique': 24, 'relevant_months': 24, 'supported_relevant_months': 24,
@@ -256,6 +257,40 @@ class BDPresentationTest(unittest.TestCase):
         self.assertFalse(state['represents_full_duration'])
         self.assertIn('belum dapat dipastikan', state['explanation'])
 
+    def test_unassessed_relevance_is_not_presented_as_zero(self):
+        person = copy.deepcopy(self.person)
+        person['relevance_assessment'] = {'status': 'unassessed'}
+        person['chronology'].update(relevant_months=0, supported_relevant_months=0)
+        state = self.present.experience_duration(person)
+        self.assertEqual(state['total']['value'], 24)
+        self.assertIsNone(state['relevant']['value'])
+        self.assertIsNone(state['supported']['value'])
+        self.assertIn('belum dinilai', state['relevant']['display'])
+
+    def test_evaluated_zero_relevant_months_remains_numeric(self):
+        person = copy.deepcopy(self.person)
+        person['relevance_assessment'] = {'status': 'complete'}
+        person['chronology'].update(relevant_months=0, supported_relevant_months=0)
+        state = self.present.experience_duration(person)
+        self.assertEqual(state['relevant']['value'], 0)
+        self.assertEqual(state['supported']['value'], 0)
+
+    def test_documented_zero_requires_grounded_absence_state(self):
+        person = copy.deepcopy(self.person)
+        person['employment_history'] = []
+        person['identity']['claimed_months'] = 0
+        person['chronology'] = {'calendar_months_unique': 0, 'relevant_months': 0,
+                                'supported_relevant_months': 0, 'uncertain_entries': [],
+                                'calculable_entries': 0}
+        person['history_extraction'] = {
+            'status': 'no_experience_declared', 'identified_count': 0, 'source_refs': []}
+        self.assertIsNone(self.present.experience_duration(person)['total']['value'])
+        person['history_extraction']['source_refs'] = [
+            {'document_id': 'D001', 'page': 1, 'quote': 'CV telah ditinjau'}]
+        state = self.present.experience_duration(person)
+        self.assertEqual(state['total']['value'], 0)
+        self.assertTrue(state['represents_full_duration'])
+
     def test_short_source_values_do_not_split_internal_identifiers(self):
         self.person['name'] = 'a'
         self.person['certificates'][0]['number'] = '001'
@@ -310,6 +345,32 @@ class BDExportTest(unittest.TestCase):
         self.assertIn('CV Contoh.pdf, halaman 1:', text)
         self.assertTrue(any('KAK Contoh.pdf, halaman 2:' in str(row[-1]) for row in rows))
         self.assertIn('40 butir informasi', text)
+
+    def test_pdf_evidence_markers_resolve_to_scoped_labeled_index_entries(self):
+        person = self.data['people'][0]
+        second = {'document_id': 'D001', 'page': 1, 'quote': 'Kutipan berbeda pada halaman yang sama'}
+        person['anomalies'].append({**copy.deepcopy(person['anomalies'][0]), 'id': 'A002',
+                                    'detail': 'Temuan material kedua.', 'source_refs': [second]})
+        presenter = ReportPresenter(self.data)
+        self.assertEqual(presenter.evidence_index(person), presenter.evidence_index(person))
+        pdf_path, _ = self.export()
+        text = ' '.join(pdf_text(pdf_path).split())
+        self.assertIn('Indeks bukti personel', text)
+        self.assertIn('B001 | CV Contoh.pdf, halaman 1:', text)
+        self.assertIn('B003 | CV Contoh.pdf, halaman 1:', text)
+        self.assertGreaterEqual(text.count('B001'), 2)
+        self.assertGreaterEqual(text.count('B003'), 2)
+
+    def test_pdf_does_not_reference_hidden_detailed_kak_section(self):
+        person = self.data['people'][0]
+        person['checks'] = []
+        person['kak_match_details'] = [
+            {**item, 'status': 'memenuhi'} for item in person['kak_match_details']
+        ]
+        pdf_path, _ = self.export()
+        text = pdf_text(pdf_path)
+        self.assertNotIn('disajikan pada bagian Pemeriksaan KAK Terperinci', text)
+        self.assertNotIn('Persyaratan KAK yang memerlukan perhatian', text)
 
     def test_internal_identifiers_are_not_in_business_exports(self):
         pdf_path, xlsx_path = self.export()

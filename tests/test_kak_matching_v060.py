@@ -25,7 +25,7 @@ class KakMatchingV060Test(unittest.TestCase):
     def ref(page, quote):
         return {'document_id': 'D001', 'page': page, 'quote': quote}
 
-    def prepare_run(self, mutate_plan=None):
+    def prepare_run(self, mutate_plan=None, minimum_months=12):
         source = self.root / 'structured-kak.pdf'
         source.write_bytes(b'Synthetic PDF; OCR mocked')
         started = review.dispatch({'action': 'start', 'payload': {
@@ -44,7 +44,7 @@ class KakMatchingV060Test(unittest.TestCase):
             'Posisi Engineer membutuhkan pengalaman sebagai Site Engineer\n'
             'Pengalaman proyek jembatan\n'
             'Pengalaman pada konsultan supervisi\n'
-            'Pengalaman minimal 12 bulan\n'
+            f'Pengalaman minimal {minimum_months} bulan\n'
             'Uraian tugas pengawasan struktur\n'
             'Pendidikan minimal S1 Teknik Sipil\n'
             'SKK Ahli Teknik Jembatan jenjang 7 masih berlaku\n'
@@ -86,8 +86,8 @@ class KakMatchingV060Test(unittest.TestCase):
                  'source_refs': [self.ref(4, 'Pengalaman pada konsultan supervisi')]},
                 {'id': 'R5', 'role': 'Engineer', 'kind': 'experience',
                  'audit_code': 'experience_duration_match',
-                 'text': 'Pengalaman minimal 12 bulan', 'minimum_months': 12,
-                 'source_refs': [self.ref(4, 'Pengalaman minimal 12 bulan')]},
+                 'text': f'Pengalaman minimal {minimum_months} bulan', 'minimum_months': minimum_months,
+                 'source_refs': [self.ref(4, f'Pengalaman minimal {minimum_months} bulan')]},
                 {'id': 'R6', 'role': 'Engineer', 'kind': 'experience',
                  'audit_code': 'responsibility_position_match',
                  'text': 'Uraian tugas pengawasan struktur', 'minimum_months': None,
@@ -273,8 +273,77 @@ class KakMatchingV060Test(unittest.TestCase):
                        'text': 'Minimal 36 bulan', 'minimum_months': 36, 'source_refs': []}
         history = [{'id': 'E001', 'relevant': True, 'source_refs': [], 'supporting_refs': []}]
         chronology = {'relevant_months': 24, 'supported_relevant_months': 24, 'uncertain_entries': []}
-        detail = duration_details([requirement], 'Engineer', history, chronology)[0]
+        detail = duration_details([requirement], 'Engineer', history, chronology, {
+            'history_extraction': {'status': 'complete'}, 'relevance_assessed': True,
+        })[0]
         self.assertEqual(detail['status'], 'tidak_memenuhi')
+
+    def test_duration_below_minimum_is_unresolved_when_history_is_partial_or_unknown(self):
+        requirement = {'id': 'D', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+                       'text': 'Minimal 60 bulan', 'minimum_months': 60, 'source_refs': []}
+        history = [{'id': 'E001', 'relevant': True, 'source_refs': [], 'supporting_refs': []}]
+        chronology = {'relevant_months': 12, 'supported_relevant_months': 12, 'uncertain_entries': []}
+        for status in ('partially_extracted', 'unknown'):
+            with self.subTest(status=status):
+                detail = duration_details([requirement], 'Engineer', history, chronology, {
+                    'history_extraction': {'status': status}, 'relevance_assessed': True,
+                })[0]
+                self.assertEqual(detail['status'], 'perlu_klarifikasi')
+
+    def test_supported_subset_can_establish_minimum_despite_partial_history(self):
+        requirement = {'id': 'D', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+                       'text': 'Minimal 12 bulan', 'minimum_months': 12, 'source_refs': []}
+        history = [{'id': 'E001', 'relevant': True, 'source_refs': [], 'supporting_refs': []}]
+        chronology = {'relevant_months': 12, 'supported_relevant_months': 12, 'uncertain_entries': []}
+        detail = duration_details([requirement], 'Engineer', history, chronology, {
+            'history_extraction': {'status': 'partially_extracted'}, 'relevance_assessed': True,
+        })[0]
+        self.assertEqual(detail['status'], 'memenuhi')
+
+    def test_missing_evaluation_context_is_conservative(self):
+        requirement = {'id': 'D', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+                       'text': 'Minimal 60 bulan', 'minimum_months': 60, 'source_refs': []}
+        detail = duration_details([requirement], 'Engineer', [], {
+            'relevant_months': 0, 'supported_relevant_months': 0, 'uncertain_entries': [],
+        })[0]
+        self.assertEqual(detail['status'], 'perlu_klarifikasi')
+
+    def test_zero_month_requirement_does_not_claim_verified_experience(self):
+        requirement = {'id': 'D', 'role': 'Engineer', 'audit_code': 'experience_duration_match',
+                       'text': 'Minimal 0 bulan', 'minimum_months': 0, 'source_refs': []}
+        detail = duration_details([requirement], 'Engineer', [], {
+            'relevant_months': 0, 'supported_relevant_months': 0, 'uncertain_entries': [],
+        })[0]
+        self.assertEqual(detail['status'], 'memenuhi')
+        self.assertIn('bukan bukti', detail['finding'])
+
+    def test_partial_history_below_kak_minimum_stays_clarification_through_export(self):
+        rid = self.prepare_run(minimum_months=60)
+        person = self.person_payload()
+        person['identity']['claimed_months'] = 120
+        person['employment_history'][0].update(start_date='2021-01', end_date='2021-12', supporting_facts=[])
+        person['history_extraction'] = {
+            'status': 'partially_extracted', 'identified_count': 5,
+            'analysis': 'CV menunjukkan empat pengalaman tambahan yang belum berhasil dipetakan.',
+            'source_refs': [self.ref(1, 'Proyek Jembatan Sungai')],
+        }
+        saved = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        statuses = {item['code']: item['status'] for item in saved['audit_checks']}
+        self.assertEqual(statuses['experience_duration_match'], 'perlu_klarifikasi')
+        self.assertEqual(saved['final_conclusion']['status'], 'perlu_klarifikasi')
+        snap = review.snapshot(storage.run_dir(rid))
+        self.assertEqual(snap['people'][0]['final_conclusion']['status'], 'perlu_klarifikasi')
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+        self.assertEqual(len(exported['artifacts']), 2)
+        workbook = load_workbook(exported['artifacts'][0]['path'], read_only=True, data_only=True)
+        try:
+            sheet = workbook['Ringkasan Pemeriksaan']
+            headers = [cell.value for cell in sheet[1]]
+            conclusion = headers.index('Kesimpulan KAK') + 1
+            self.assertEqual(sheet.cell(2, conclusion).value, 'Perlu Klarifikasi')
+        finally:
+            workbook.close()
 
     def test_education_level_failure_and_major_ambiguity_are_distinct(self):
         req = {'id': 'E', 'role': 'Engineer', 'audit_code': 'education_major_match',

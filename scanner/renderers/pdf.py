@@ -73,15 +73,19 @@ def render(data, path):
     field('KAK:', data['kak'].get('title', 'Tidak tersedia'))
     field('Versi / paket:', f"{data['kak'].get('version','-')} / {data['kak'].get('package_id','-')}")
     field('Ketersediaan dan sumber KAK:', present.status(data['kak'].get('status')))
-    kak_unavailable = data['kak'].get('status') == 'tidak_tersedia' or not data['requirements']
-    if kak_unavailable:
+    kak_missing = data['kak'].get('status') == 'tidak_tersedia'
+    requirements_unavailable = not data['requirements']
+    kak_unavailable = kak_missing or requirements_unavailable
+    if kak_missing:
         add('Persyaratan KAK yang dapat dipakai belum tersedia. Pemeriksaan KAK tidak diterapkan; '
             'hal ini tidak berarti KAK pasti tidak mensyaratkan aspek-aspek tersebut.')
+    elif requirements_unavailable:
+        add('Dokumen KAK tersedia, tetapi persyaratan terstruktur belum berhasil dipetakan. '
+            'Kesesuaian belum dapat dinilai sampai pemetaan diperjelas.')
     else:
         add(present.narrative(data['kak'].get('analysis', '')))
     for limitation in data['limitations']:
-        lowered = limitation.casefold()
-        if kak_unavailable and 'kak' in lowered and ('tidak ada' in lowered or 'tidak tersedia' in lowered):
+        if kak_unavailable and limitation == 'Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.':
             continue
         field('Keterbatasan:', present.narrative(limitation))
     add('Identitas sertifikat, masa berlaku pada dokumen, dan kesesuaian terhadap KAK diperiksa secara terpisah. '
@@ -104,11 +108,12 @@ def render(data, path):
             refs(education.get('supporting_refs', []))
         field('Lama pengalaman dalam CV (bulan):', person['identity'].get('claimed_months'))
         add(present.narrative(person['summary'], person))
-        add('Pemeriksaan persyaratan KAK', heading)
-        if not kak_unavailable and not person['checks'] and not person.get('kak_match_details'):
+        has_legacy_checks = bool(person['checks'])
+        has_structured_details = bool(person.get('kak_match_details'))
+        if has_legacy_checks or (not kak_unavailable and not has_structured_details):
+            add('Pemeriksaan persyaratan KAK', heading)
+        if not kak_unavailable and not has_legacy_checks and not has_structured_details:
             add('Belum tersedia kriteria KAK untuk posisi ini yang dapat digunakan. Kesesuaian belum dapat dinilai.')
-        elif not person['checks']:
-            add('Rincian persyaratan dan buktinya disajikan pada bagian Pemeriksaan KAK Terperinci.')
         for check in person['checks']:
             field('Persyaratan:', check['requirement'])
             check_block(check, person)
@@ -230,9 +235,10 @@ def render(data, path):
         add(present.narrative(person.get('review_note', ''), person), small)
         evidence = present.evidence_index(person)
         if evidence:
-            add('Indeks bukti', heading)
-            add('Setiap kutipan ditampilkan sekali. Rincian keterkaitan per audit tetap tersedia dalam arsip audit dan workbook.', small)
-            refs(evidence)
+            add('Indeks bukti personel', heading)
+            add('Penomoran Bxxx berlaku untuk personel ini. Setiap kutipan ditampilkan sekali.', small)
+            for evidence_number, ref in enumerate(evidence, 1):
+                add(f"B{evidence_number:03d} | {present.references([ref])}", small)
 
     story.append(PageBreak())
     add('4. Dokumen dan sumber pemeriksaan', heading)

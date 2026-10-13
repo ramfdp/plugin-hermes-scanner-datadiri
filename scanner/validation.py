@@ -1,4 +1,3 @@
-"""Evidence and completeness rules. No hiring scores or automated hiring decisions."""
 import copy
 import re
 from datetime import date
@@ -220,7 +219,7 @@ def read_receipt(root, receipt_id):
 
 def chronology(history, as_of=None):
     """Union of calendar months when month precision is actually available."""
-    all_months, relevant, supported, uncertain = set(), set(), set(), []
+    all_months, relevant, supported, uncertain, calculable_entries = set(), set(), set(), [], 0
     for number, job in enumerate(history, 1):
         start, end = partial_date(job.get("start_date")), partial_date(job.get("end_date"))
         if not start["valid"] or not end["valid"]:
@@ -243,6 +242,7 @@ def chronology(history, as_of=None):
             b = min(b, cutoff)
         if b < a:
             continue
+        calculable_entries += 1
         months = set(range(a, b + 1))
         all_months |= months
         if job.get("relevant") is True:
@@ -254,6 +254,7 @@ def chronology(history, as_of=None):
         "relevant_months": len(relevant),
         "supported_relevant_months": len(supported),
         "uncertain_entries": list(dict.fromkeys(uncertain)),
+        "calculable_entries": calculable_entries,
         "method": "Bulan kalender inklusif; overlap dihitung sekali. YYYY-MM dan YYYY-MM-DD dapat dihitung pada tingkat bulan; YYYY tetap tidak diubah menjadi bulan tebakan. Bulan penilaian yang belum selesai dan bulan berikutnya dikecualikan.",
     }
 
@@ -295,7 +296,41 @@ def certificate_result(root, manifest, certificate, holder, as_of):
     return cert
 
 
-def validate_person(root, manifest, plan, payload):
+def _history_extraction_contradiction(extraction, history, claimed, source_refs):
+    status = extraction['status']
+    identified = extraction.get('identified_count')
+    positive_claim = isinstance(claimed, int) and claimed > 0
+
+    if status == 'complete':
+        if identified != len(history):
+            return 'history_extraction complete harus mencocokkan jumlah riwayat terstruktur'
+        if not history and positive_claim:
+            return 'history_extraction complete tidak sesuai claimed_months positif tanpa riwayat'
+        if not source_refs:
+            return 'history_extraction complete membutuhkan bukti halaman CV yang telah ditinjau'
+    elif status == 'partially_extracted':
+        if identified is None or identified <= len(history):
+            return 'history_extraction partial membutuhkan jumlah pengalaman sumber yang lebih besar'
+        if not source_refs:
+            return 'history_extraction partial membutuhkan bukti halaman CV yang telah ditinjau'
+    elif status == 'claimed_not_extracted':
+        if history:
+            return 'history_extraction claimed_not_extracted tidak sesuai riwayat terstruktur'
+        if not positive_claim and not (isinstance(identified, int) and identified > 0):
+            return 'history_extraction claimed_not_extracted membutuhkan klaim atau pengalaman sumber teridentifikasi'
+    elif status == 'no_experience_declared':
+        if history:
+            return 'history_extraction no_experience_declared tidak sesuai riwayat terstruktur'
+        if positive_claim:
+            return 'history_extraction no_experience_declared tidak sesuai claimed_months positif'
+        if identified != 0:
+            return 'history_extraction no_experience_declared membutuhkan identified_count 0'
+        if not source_refs:
+            return 'history_extraction no_experience_declared membutuhkan bukti halaman CV yang telah ditinjau'
+    return None
+
+
+def validate_person(root, manifest, plan, payload, *, stored=False):
     person = copy.deepcopy(payload)
     roster = next((p for p in plan['roster'] if p['id'] == person.get('id')), None)
     if roster is None:
@@ -410,15 +445,17 @@ def validate_person(root, manifest, plan, payload):
             raise ValueError('history_extraction.identified_count harus integer nonnegatif atau null')
         require_text(extraction.get('analysis'), 'history_extraction.analysis', 20)
         extraction_refs = source_refs(root, manifest, extraction.get('source_refs', []),
-                                      required=extraction['status'] in {'partially_extracted', 'complete'},
+                                      required=not stored and extraction['status'] in {'partially_extracted', 'complete'},
                                       kinds={'cv'}, page_classification=classification)
         own_refs(extraction_refs)
-        if extraction['status'] == 'complete' and count != len(history):
-            raise ValueError('history_extraction complete harus mencocokkan jumlah riwayat terstruktur')
-        if extraction['status'] == 'partially_extracted' and (count is None or count <= len(history)):
-            raise ValueError('history_extraction partial membutuhkan jumlah pengalaman sumber yang lebih besar')
-        if extraction['status'] == 'no_experience_declared' and history:
-            raise ValueError('history_extraction no_experience_declared tidak sesuai riwayat terstruktur')
+        contradiction = _history_extraction_contradiction(extraction, history, claimed, extraction_refs)
+        if contradiction:
+            if not stored:
+                raise ValueError(contradiction)
+            extraction.update(
+                status='unknown', identified_count=None,
+                analysis='Status riwayat tersimpan bertentangan atau tidak cukup didukung; ditafsirkan konservatif saat ekspor.',
+            )
     person['history_extraction'] = extraction
 
     education_records = records(person.get('education_records', []), 'education_records')
@@ -463,6 +500,18 @@ def validate_person(root, manifest, plan, payload):
                         for exp_id in assessment.get('experience_ids', [])}
         for job in history:
             job['relevant'] = job['id'] in relevant_ids
+    else:
+        for job in history:
+            job['relevant'] = None
+
+    position_assessments = [assessment for assessment in semantic_assessments
+                            if assessment['code'] == 'position_experience_match']
+    relevance_assessed = bool(position_requirements) and all(
+        item['status'] in {'memenuhi', 'tidak_memenuhi'} for item in position_assessments)
+    person['relevance_assessment'] = {
+        'status': ('complete' if relevance_assessed and extraction['status'] == 'complete' else
+                   'partial' if position_assessments else 'unassessed'),
+    }
 
     assessment_date = date.fromisoformat(manifest['assessment_date'])
     person['chronology'] = chronology(history, assessment_date)
@@ -480,7 +529,10 @@ def validate_person(root, manifest, plan, payload):
 
     kak_matching = compute_kak_matching(
         plan['requirements'], person['role'], history, person['chronology'],
-        education_records, person['certificates'], semantic_assessments)
+        education_records, person['certificates'], semantic_assessments, {
+            'history_extraction': extraction,
+            'relevance_assessed': relevance_assessed,
+        })
     person['kak_match_details'] = kak_matching['details']
 
     submitted_audit_checks = validate_audit_checks(person.get('audit_checks', []))

@@ -167,6 +167,7 @@ class ReportPresenter:
         status = extraction.get('status', 'unknown')
         claimed = person.get('identity', {}).get('claimed_months')
         uncertain = chronology.get('uncertain_entries', [])
+        relevance_status = person.get('relevance_assessment', {}).get('status', 'unassessed')
 
         def metric(key, unavailable):
             value = chronology.get(key)
@@ -175,7 +176,9 @@ class ReportPresenter:
             return {'value': value, 'display': value if value is not None else unavailable}
 
         if not history:
-            if status == 'no_experience_declared':
+            grounded_absence = (status == 'no_experience_declared' and claimed in {None, 0} and
+                                extraction.get('identified_count') == 0 and extraction.get('source_refs'))
+            if grounded_absence:
                 explanation = 'Dokumen sumber secara eksplisit tidak menyatakan pengalaman kerja.'
                 total = relevant = supported = {'value': 0, 'display': 0}
                 full = True
@@ -187,12 +190,18 @@ class ReportPresenter:
                 total = relevant = supported = {'value': None, 'display': unavailable}
                 full = False
         else:
-            known_entries = max(0, len(history) - len(uncertain))
+            calculable_entries = chronology.get('calculable_entries')
+            if not isinstance(calculable_entries, int):
+                calculable_entries = max(0, len(history) - len(uncertain))
             unavailable = 'Belum dapat dihitung; seluruh tanggal pengalaman belum lengkap atau tidak valid'
             total = metric('calendar_months_unique', unavailable)
-            relevant = metric('relevant_months', unavailable)
-            supported = metric('supported_relevant_months', unavailable)
-            if uncertain and known_entries == 0:
+            if relevance_status == 'unassessed':
+                relevance_unavailable = 'Belum dapat dinilai; relevansi pengalaman terhadap KAK belum dinilai'
+                relevant = supported = {'value': None, 'display': relevance_unavailable}
+            else:
+                relevant = metric('relevant_months', unavailable)
+                supported = metric('supported_relevant_months', unavailable)
+            if uncertain and calculable_entries == 0:
                 total = relevant = supported = {'value': None, 'display': unavailable}
             full = status == 'complete' and not uncertain
             if status == 'partially_extracted':
@@ -205,12 +214,15 @@ class ReportPresenter:
                 explanation = 'Angka mencakup seluruh riwayat teridentifikasi dengan tanggal yang dapat dihitung.'
             if uncertain and status != 'complete':
                 explanation += ' Sebagian tanggal juga belum lengkap atau tidak valid.'
+            if relevance_status == 'unassessed':
+                explanation += ' Relevansi terhadap KAK belum dinilai; angka relevan tidak ditampilkan sebagai nol.'
         return {
             'calculable': total['value'] is not None,
             'value': total['value'], 'display': total['display'],
             'total': total, 'relevant': relevant, 'supported': supported,
             'extraction_complete': status == 'complete' or status == 'no_experience_declared',
             'dates_complete': not uncertain,
+            'relevance_status': relevance_status,
             'represents_full_duration': full,
             'explanation': explanation,
         }

@@ -223,7 +223,18 @@ class EvidenceOwnershipTest(unittest.TestCase):
 
     def test_future_months_are_not_experience_already_earned(self):
         from datetime import date
-        from scanner.validation import chronology
         value = chronology([{'start_date': '2026-08', 'end_date': '2028-01', 'relevant': True}], date(2026, 9, 23))
         self.assertEqual(value['calendar_months_unique'], 1)
+        self.assertEqual(value['uncertain_entries'], [1])
+
+    def test_exact_period_crossing_cutoff_preserves_elapsed_months(self):
+        from datetime import date
+        value = chronology([{
+            'start_date': '2026-01', 'end_date': '2026-12', 'relevant': True,
+            'supporting_refs': [{'document_id': 'D', 'page': 1, 'quote': 'support'}],
+        }], date(2026, 9, 23))
+        self.assertEqual(value['calendar_months_unique'], 8)
+        self.assertEqual(value['relevant_months'], 8)
+        self.assertEqual(value['supported_relevant_months'], 8)
+        self.assertEqual(value['calculable_entries'], 1)
         self.assertEqual(value['uncertain_entries'], [1])

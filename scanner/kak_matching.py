@@ -221,7 +221,10 @@ def _history_refs(history, *, relevant_only=False):
     return _unique_refs(refs)
 
 
-def duration_details(requirements, role, history, chronology):
+def duration_details(requirements, role, history, chronology, evaluation_context=None):
+    context = evaluation_context or {}
+    extraction_status = context.get("history_extraction", {}).get("status", "unknown")
+    relevance_assessed = context.get("relevance_assessed") is True
     rows = []
     relevant = chronology.get("relevant_months", 0)
     supported = chronology.get("supported_relevant_months", 0)
@@ -231,19 +234,24 @@ def duration_details(requirements, role, history, chronology):
         if req.get("audit_code") != "experience_duration_match" or not applicable(req, role):
             continue
         minimum = req["minimum_months"]
-        if relevant >= minimum and supported >= minimum:
+        if minimum == 0:
+            status = "memenuhi"
+            finding = ("Minimum KAK adalah 0 bulan; ambang numerik terpenuhi. "
+                       "Hasil ini bukan bukti bahwa pengalaman kerja telah diverifikasi.")
+            clarification = ""
+        elif relevance_assessed and relevant >= minimum and supported >= minimum:
             status = "memenuhi"
             finding = f"Pengalaman relevan {relevant} bulan dan didukung {supported} bulan; minimum KAK {minimum} bulan."
             clarification = ""
-        elif relevant < minimum and not uncertain:
+        elif relevance_assessed and extraction_status == "complete" and relevant < minimum and not uncertain:
             status = "tidak_memenuhi"
             finding = f"Pengalaman relevan {relevant} bulan, di bawah minimum KAK {minimum} bulan."
             clarification = ""
         else:
             status = "perlu_klarifikasi"
             finding = (f"Pengalaman relevan {relevant} bulan, didukung {supported} bulan, minimum KAK {minimum} bulan; "
-                       f"{len(uncertain)} entri belum dapat dihitung penuh.")
-            clarification = "Lengkapi periode/bukti pengalaman yang belum pasti sebelum menetapkan durasi yang dapat dipakai."
+                       f"{len(uncertain)} entri belum dapat dihitung penuh. Cakupan ekstraksi atau penilaian relevansi belum cukup untuk menetapkan kekurangan durasi.")
+            clarification = "Lengkapi pemetaan, penilaian relevansi, periode, atau bukti pengalaman sebelum menetapkan durasi yang dapat dipakai."
         rows.append(_detail(
             req, status, finding,
             "Durasi memakai union bulan kalender pengalaman yang ditandai relevan; overlap tidak dihitung dua kali.",
@@ -361,10 +369,11 @@ def certificate_details(requirements, role, certificates):
     return rows
 
 
-def compute_kak_matching(requirements, role, history, chronology, education_records, certificates, semantic_assessments):
+def compute_kak_matching(requirements, role, history, chronology, education_records, certificates,
+                         semantic_assessments, evaluation_context=None):
     semantic = [copy.deepcopy(row) for row in semantic_assessments]
     details = semantic
-    details.extend(duration_details(requirements, role, history, chronology))
+    details.extend(duration_details(requirements, role, history, chronology, evaluation_context))
     details.extend(education_details(requirements, role, education_records))
     details.extend(certificate_details(requirements, role, certificates))
     order = {item["code"]: item["number"] for item in AUDIT_CRITERIA}

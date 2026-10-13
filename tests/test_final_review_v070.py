@@ -345,6 +345,74 @@ class FinalReviewV070Test(unittest.TestCase):
         anomaly = next(item for item in stored['anomalies'] if item['code'] == 'history_extraction_incomplete')
         self.assertTrue(anomaly['material'])
 
+    def test_new_payload_rejects_no_experience_status_with_positive_claim(self):
+        rid = self.prepare_run()
+        person = self.person()
+        person['identity']['claimed_months'] = 120
+        person['employment_history'] = []
+        person['employer_checks'] = []
+        person['semantic_assessments'] = [
+            {**row, 'status': 'perlu_klarifikasi', 'experience_ids': [],
+             'clarification': 'Tidak ada riwayat pengalaman untuk dinilai terhadap requirement.'}
+            for row in person['semantic_assessments']
+        ]
+        person['history_extraction'] = {
+            'status': 'no_experience_declared', 'identified_count': 0,
+            'analysis': 'Payload menyatakan tidak ada pengalaman meskipun durasi positif diklaim.',
+            'source_refs': [self.ref(1, 'Personel Final')],
+        }
+        with self.assertRaisesRegex(ValueError, 'no_experience_declared.*claimed_months'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_grounded_zero_documented_experience_is_distinct_from_missing_extraction(self):
+        rid = self.prepare_run()
+        person = self.person()
+        person['identity']['claimed_months'] = 0
+        person['employment_history'] = []
+        person['employer_checks'] = []
+        person['semantic_assessments'] = [
+            {**row, 'status': 'perlu_klarifikasi', 'experience_ids': [],
+             'clarification': 'Tidak ada riwayat pengalaman untuk dinilai terhadap requirement.'}
+            for row in person['semantic_assessments']
+        ]
+        person['history_extraction'] = {
+            'status': 'no_experience_declared', 'identified_count': 0,
+            'analysis': 'Halaman CV yang ditinjau tidak menyatakan riwayat pengalaman kerja.',
+            'source_refs': [self.ref(1, 'Personel Final')],
+        }
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        snapshot = review.snapshot(storage.run_dir(rid))
+        duration = snapshot['people'][0]['chronology']
+        self.assertEqual(duration['calendar_months_unique'], 0)
+        self.assertEqual(snapshot['people'][0]['history_extraction']['status'], 'no_experience_declared')
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+
+    def test_legacy_contradictory_absence_is_qualified_without_rewriting_checkpoint(self):
+        rid = self.prepare_run()
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person()})
+        path = storage.run_dir(rid) / 'people' / 'P1.json'
+        legacy = storage.load(path)
+        legacy['identity']['claimed_months'] = 120
+        legacy['history_extraction'] = {
+            'status': 'no_experience_declared', 'identified_count': 0,
+            'analysis': 'Legacy contradictory absence state retained only for compatibility testing.',
+            'source_refs': [],
+        }
+        storage.save(path, legacy)
+        snapshot = review.snapshot(storage.run_dir(rid))
+        self.assertEqual(snapshot['people'][0]['history_extraction']['status'], 'unknown')
+        self.assertEqual(len(snapshot['people'][0]['employment_history']), 1)
+        self.assertEqual(storage.load(path)['history_extraction']['status'], 'no_experience_declared')
+        first_export = review.dispatch({'action': 'export', 'run_id': rid})
+        second_export = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(first_export['success'], first_export)
+        self.assertTrue(second_export['success'], second_export)
+        self.assertEqual(len(first_export['artifacts']), 2)
+        self.assertEqual(len(second_export['artifacts']), 2)
+        self.assertNotEqual(first_export['artifacts'][0]['path'], second_export['artifacts'][0]['path'])
+        self.assertEqual(storage.load(path)['history_extraction']['status'], 'no_experience_declared')
+
     def test_unknown_extraction_with_year_dates_is_idempotent_and_exports(self):
         rid = self.prepare_run()
         person = self.person()

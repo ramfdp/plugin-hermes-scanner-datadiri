@@ -131,7 +131,7 @@ def snapshot(root):
         if not path.exists():
             missing.append(roster['id'])
         else:
-            people.append(validate_person(root, manifest, plan, storage.load(path)))
+            people.append(validate_person(root, manifest, plan, storage.load(path), stored=True))
     if missing:
         raise ValueError('Review personel belum lengkap: ' + ', '.join(missing))
     limitations = []
