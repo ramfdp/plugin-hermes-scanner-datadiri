@@ -109,6 +109,24 @@ class ReportPresenter:
     def web_source(self, receipt_id):
         return self.web_sources.get(receipt_id, 'Sumber daring belum teridentifikasi')
 
+    @staticmethod
+    def value(value, fallback='Belum tersedia'):
+        return fallback if value is None or (isinstance(value, str) and not value.strip()) else value
+
+    def limitation_groups(self, values):
+        """Group repeated person-scoped limitations without changing the snapshot."""
+        grouped, standalone = {}, []
+        for value in values or []:
+            match = re.match(r'^([^:]+):\s*(.+)$', str(value))
+            if match and match.group(1) in self.people:
+                grouped.setdefault(match.group(2), []).append(self.people[match.group(1)])
+            else:
+                standalone.append(self.narrative(value))
+        for detail, names in grouped.items():
+            unique = list(dict.fromkeys(names))
+            standalone.append(f"{len(unique)} personel: {self.narrative(detail)} Personel: {', '.join(unique)}.")
+        return standalone
+
     def references(self, values):
         # Quotes are evidence, not narrative: no glossary or rewriting is applied.
         unique, seen = [], set()
@@ -242,14 +260,9 @@ class ReportPresenter:
         }.get(value, 'Kelengkapan ekstraksi belum dapat dipastikan')
 
     def reference_markers(self, person, values):
-        index = {(r.get('document_id'), r.get('page'), r.get('quote')): number
-                 for number, r in enumerate(self.evidence_index(person), 1)}
         markers = []
         for ref in values or []:
-            key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
-            number = index.get(key)
-            if number is not None:
-                markers.append(f"B{number:03d} ({self.document(ref.get('document_id'))}, halaman {ref.get('page', '?')})")
+            markers.append(f"{self.document(ref.get('document_id'))}, halaman {ref.get('page', '?')}")
         return ', '.join(dict.fromkeys(markers)) or 'Bukti sumber tidak tersedia'
 
     @staticmethod
@@ -268,7 +281,7 @@ class ReportPresenter:
                 refs.extend(item.get('source_refs', []))
         result, seen = [], set()
         for ref in refs:
-            key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
+            key = (ref.get('document_id'), ref.get('page'))
             if key not in seen:
                 seen.add(key)
                 result.append(ref)

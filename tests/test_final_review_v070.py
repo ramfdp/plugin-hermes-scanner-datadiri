@@ -522,7 +522,7 @@ class FinalReviewV070Test(unittest.TestCase):
         book = load_workbook(exported['artifacts'][0]['path'], read_only=True, data_only=True)
         try:
             self.assertIn('Pencocokan Dokumen', book.sheetnames)
-            self.assertIn('Konfirmasi Data', book.sheetnames)
+            self.assertNotIn('Konfirmasi Data', book.sheetnames)
             review_sheet = book['Ringkasan Pemeriksaan']
             self.assertEqual(review_sheet['D2'].value, 'Memenuhi')
             audit = book['Hasil Pemeriksaan']

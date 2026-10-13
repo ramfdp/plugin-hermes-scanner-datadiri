@@ -334,6 +334,10 @@ class BDExportTest(unittest.TestCase):
         text = ' '.join(pdf_text(pdf_path).split())
         book = load_workbook(xlsx_path, data_only=True)
         self.addCleanup(book.close)
+        self.assertEqual(book.sheetnames[0], 'Daftar Isi')
+        listed = [row[0] for row in book['Daftar Isi'].iter_rows(min_row=2, values_only=True)]
+        self.assertIn('Ringkasan Personel', listed)
+        self.assertIn('Hasil Pemeriksaan', listed)
         self.assertEqual(book['Ringkasan Personel'].max_row, len(self.data['people']) + 5)
         self.assertEqual(book['Ringkasan Pemeriksaan']['D2'].value, 'Perlu Klarifikasi')
         audit = book['Hasil Pemeriksaan']
@@ -374,7 +378,7 @@ class BDExportTest(unittest.TestCase):
                 finally:
                     book.close()
 
-    def test_pdf_evidence_markers_resolve_to_scoped_labeled_index_entries(self):
+    def test_pdf_evidence_markers_resolve_to_compact_document_pages(self):
         person = self.data['people'][0]
         second = {'document_id': 'D001', 'page': 1, 'quote': 'Kutipan berbeda pada halaman yang sama'}
         person['anomalies'].append({**copy.deepcopy(person['anomalies'][0]), 'id': 'A002',
@@ -383,11 +387,8 @@ class BDExportTest(unittest.TestCase):
         self.assertEqual(presenter.evidence_index(person), presenter.evidence_index(person))
         pdf_path, _ = self.export()
         text = ' '.join(pdf_text(pdf_path).split())
-        self.assertIn('Indeks bukti personel', text)
-        self.assertIn('B001 | CV Contoh.pdf, halaman 1:', text)
-        self.assertIn('B003 | CV Contoh.pdf, halaman 1:', text)
-        self.assertGreaterEqual(text.count('B001'), 2)
-        self.assertGreaterEqual(text.count('B003'), 2)
+        self.assertNotIn('Indeks bukti personel', text)
+        self.assertIn('CV Contoh.pdf, halaman 1', text)
         second_pdf, _ = self.export()
         self.assertEqual(text, ' '.join(pdf_text(second_pdf).split()))
 
@@ -421,7 +422,6 @@ class BDExportTest(unittest.TestCase):
         literal = 'project_duplicate & start_date are printed on the original.'
         self.data['people'][0]['employment_history'][0]['source_refs'][0]['quote'] = literal
         pdf_path, xlsx_path = self.export()
-        self.assertIn(literal, pdf_text(pdf_path))
         book = load_workbook(xlsx_path)
         self.addCleanup(book.close)
         self.assertTrue(any(literal in str(v) for sheet in book for row in sheet.iter_rows(values_only=True) for v in row))
@@ -462,6 +462,30 @@ class BDExportTest(unittest.TestCase):
         book = load_workbook(xlsx_path)
         self.addCleanup(book.close)
         self.assertEqual(book['Ringkasan Pemeriksaan']['D2'].value, 'Perlu Klarifikasi')
+        self.assertNotIn('Pemeriksaan KAK', book.sheetnames)
+        self.assertNotIn('Pencocokan Dokumen', book.sheetnames)
+        self.assertNotIn('Konfirmasi Data', book.sheetnames)
+        self.assertNotIn('Pemeriksaan KAK Terperinci', book.sheetnames)
+        self.assertNotIn('Riwayat Pekerjaan', book.sheetnames)
+        self.assertNotIn('Periode dan Pencatatan Ganda', book.sheetnames)
+
+    def test_missing_business_values_use_explicit_labels(self):
+        person = self.data['people'][0]
+        person['identity']['nik'] = ''
+        person['identity']['certificate_summary'] = ''
+        person['certificates'][0].update(number='', issuer='', scheme='', issued_on='', expires_on='')
+        self.data['kak'].update(title='', version='', package_id='')
+        _, xlsx_path = self.export()
+        book = load_workbook(xlsx_path, data_only=True)
+        self.addCleanup(book.close)
+        self.assertEqual(book['Ringkasan Personel']['C6'].value, 'Tidak ditemukan pada dokumen')
+        self.assertEqual(book['Ringkasan Personel']['F6'].value, 'Tidak ditemukan pada dokumen')
+        certificate = book['Verifikasi Sertifikat']
+        self.assertEqual(certificate['D2'].value, 'Tidak ditemukan pada dokumen')
+        self.assertEqual(certificate['F2'].value, 'Tidak ditemukan pada dokumen')
+        metadata = dict(book['Info Pemeriksaan'].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(metadata['KAK'], 'Belum tersedia')
+        self.assertEqual(metadata['Versi KAK'], 'Belum tersedia')
 
     def test_pdf_and_xlsx_share_unavailable_experience_state(self):
         person = self.data['people'][0]
@@ -516,7 +540,7 @@ class BDExportTest(unittest.TestCase):
         pdf_path, _ = self.export()
         with pdfium.PdfDocument(str(pdf_path)) as document:
             self.assertLessEqual(len(document), 8)
-        self.assertIn('60 catatan audit terkait', pdf_text(pdf_path))
+        self.assertIn('60 catatan pendukung dikelompokkan', pdf_text(pdf_path))
 
     def test_nine_person_mixed_report_preserves_material_findings_and_stays_readable(self):
         people = []
@@ -540,11 +564,17 @@ class BDExportTest(unittest.TestCase):
         self.data['people'] = people
         self.data['requirements'] = []
         self.data['kak'].update(status='tidak_tersedia', title='', version='', package_id='')
-        self.data['limitations'] = ['Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.']
+        self.data['limitations'] = [
+            'Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.',
+            *[f"{person['id']}: audit cv_supporting_document_match memerlukan klarifikasi."
+              for person in people],
+            *[f"{person['id']}: identitas setidaknya satu sertifikat belum sepenuhnya terverifikasi."
+              for person in people],
+        ]
 
         pdf_path, xlsx_path = self.export()
         with pdfium.PdfDocument(str(pdf_path)) as document:
-            self.assertLessEqual(len(document), 45)
+            self.assertLessEqual(len(document), 30)
         text = pdf_text(pdf_path)
         self.assertEqual(text.count('Persyaratan KAK yang dapat dipakai belum tersedia.'), 1)
         self.assertNotIn('Belum tersedia kriteria KAK untuk posisi ini yang dapat digunakan.', text)
@@ -553,7 +583,7 @@ class BDExportTest(unittest.TestCase):
         book = load_workbook(xlsx_path, data_only=True)
         self.addCleanup(book.close)
         self.assertEqual(book['Ringkasan Pemeriksaan'].max_row, 10)
-        self.assertEqual(book['Konfirmasi Data'].max_row - 1, 63)
+        self.assertEqual(book['Konfirmasi Data'].max_row - 1, 18)
 
 
 if __name__ == '__main__':

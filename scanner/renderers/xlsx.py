@@ -15,7 +15,7 @@ def render(data, path):
         minimum = max(minimums)/12 if minimums else 'Belum tersedia'
         people.append({'nama_personel': person['name'], 'nik': identity.get('nik', ''), 'jabatan_personel': person['role'],
                        'kualifikasi_pendidikan': identity.get('education', 'Belum tersedia'),
-                       'sertifikat_keahlian': identity.get('certificate_summary', 'Lihat Verifikasi Sertifikat'),
+                       'sertifikat_keahlian': identity.get('certificate_summary') or 'Tidak ditemukan pada dokumen',
                        'pengalaman_min_kak_tahun': minimum, 'pengalaman_kerja_bulan': identity.get('claimed_months')})
     book = personnel_workbook({'judul': 'DAFTAR TENAGA AHLI', 'wilayah': data['project'],
                                'pekerjaan': f"Acuan {data['assessment_date']} | Pengalaman ringkasan = keterangan CV, bukan pengalaman tervalidasi", 'personel': people})
@@ -50,17 +50,34 @@ def render(data, path):
                                    view['clarification'], view['evidence'], view['kak_evidence']])
             for detail in person.get('document_cross_check', {}).get('details', []):
                 experience = present.experience(person, detail['experience_id']) if detail.get('experience_id') else ''
-                for item in detail.get('fields', []):
-                    support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
+                fields = detail.get('fields', [])
+                rows = fields if detail.get('type') == 'certificate' else [fields]
+                for items in rows:
+                    items = items if isinstance(items, list) else [items]
+                    if not items:
+                        continue
+                    labels = [present.field(item.get('field')) for item in items]
+                    single_certificate = detail.get('type') == 'certificate' and len(items) == 1
+                    cv_values = [(present.value(item.get('cv_value'), 'Tidak ditemukan pada dokumen')
+                                  if single_certificate else
+                                  f"{label}: {present.value(item.get('cv_value'), 'Tidak ditemukan pada dokumen')}")
+                                 for label, item in zip(labels, items)]
+                    support_values, statuses, refs = [], [], []
+                    for label, item in zip(labels, items):
+                        support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
+                        support_values.append((support or 'Tidak ditemukan pada dokumen') if single_certificate else
+                                              f"{label}: {support or 'Tidak ditemukan pada dokumen'}")
+                        statuses.append(present.status(item.get('status')))
+                        refs.extend(item.get('source_refs', []))
                     cross_rows.append([*who, present.kind(detail.get('type')), experience, detail.get('record', ''),
-                                       present.field(item.get('field')), item.get('cv_value', ''),
-                                       support or 'Belum tersedia untuk informasi ini', present.status(item.get('status')),
-                                       present.references(item.get('source_refs', [])) or 'Bukti sumber tidak tersedia'])
-            for anomaly in person.get('anomalies', []):
-                anomaly_rows.append([*who, present.anomaly_label(anomaly.get('code')), present.flag(anomaly.get('material')),
-                                     present.experiences(person, anomaly.get('experience_ids', [])),
-                                     present.field(anomaly['field']) if anomaly.get('field') else '',
-                                     explain(anomaly.get('detail', '')), present.references(anomaly.get('source_refs', []))])
+                                       ', '.join(labels), '\n'.join(cv_values), '\n'.join(support_values),
+                                       ', '.join(dict.fromkeys(statuses)),
+                                       present.references(refs) or 'Bukti sumber tidak tersedia'])
+            for anomaly in present.anomaly_groups(person):
+                anomaly_rows.append([*who, anomaly['label'], present.flag(anomaly['material']),
+                                     present.experiences(person, anomaly['experience_ids']),
+                                     ', '.join(present.field(field) for field in anomaly['fields']) or 'Tidak berlaku',
+                                     anomaly['detail'], present.references(anomaly['source_refs']) or 'Bukti sumber tidak tersedia'])
             for item in person.get('kak_match_details', []):
                 view = present.check(item, person)
                 match_rows.append([*who, view['label'], item.get('requirement_text', ''), view['status'],
@@ -70,7 +87,8 @@ def render(data, path):
                 education_rows.append([*who, *[education.get(k, '') for k in ('level', 'degree', 'major', 'institution')],
                                        present.references(education.get('source_refs', [])), present.references(education.get('supporting_refs', []))])
             for cert in person['certificates']:
-                certificates.append([*who, *[cert.get(k, '') for k in ('number', 'holder', 'issuer', 'scheme', 'level', 'issued_on', 'expires_on')],
+                certificates.append([*who, *[present.value(cert.get(k), 'Tidak ditemukan pada dokumen')
+                                             for k in ('number', 'holder', 'issuer', 'scheme', 'level', 'issued_on', 'expires_on')],
                                      present.status(cert.get('status')), present.status(cert.get('validity')),
                                      explain(cert.get('analysis', '')), explain(cert.get('reason', '')),
                                      present.web_source(cert['receipt_id']) if cert.get('receipt_id') else '',
@@ -93,7 +111,9 @@ def render(data, path):
         identity_widths = [12, 24, 24]
 
         def sheet(name, headers, rows, widths):
-            return detail_sheet(book, name, identity_headers + headers, rows, identity_widths + widths)
+            if rows:
+                return detail_sheet(book, name, identity_headers + headers, rows, identity_widths + widths)
+            return None
 
         sheet('Ringkasan Pemeriksaan', ['Kesimpulan KAK', 'Ringkasan', 'Dasar kesimpulan', 'Pengalaman dalam CV (bulan)',
               'Bulan kalender tanpa hitung ganda', 'Bulan relevan', 'Bulan relevan dengan bukti',
@@ -122,16 +142,20 @@ def render(data, path):
               'Dokumen pendukung', 'Informasi pada dokumen pendukung'], history, [36,28,24,28,28,28,30,18,18,18,48,55,55,60])
         sheet('Periode dan Pencatatan Ganda', ['Hasil pemeriksaan', 'Pengalaman pertama', 'Pengalaman kedua', 'Mulai bersamaan',
               'Akhir bersamaan', 'Hari kalender', 'Ketelitian tanggal / catatan'], pair_rows, [30,48,48,18,18,16,48])
-        detail_sheet(book, 'Jenis Dokumen per Halaman', ['Dokumen', 'Halaman awal', 'Halaman akhir', 'Jenis'],
-                     [[present.document(r['document_id']), r['first_page'], r['last_page'], present.kind(r.get('kind'))]
-                      for r in data.get('page_classification', [])], [48,16,16,28])
-        detail_sheet(book, 'Sumber Daring', ['Sumber', 'Alamat situs', 'Waktu pemeriksaan', 'Sumber berhasil diakses'],
-                     [[present.web_source(s['id']), '\n'.join(s.get('urls') or []), s.get('checked_at', ''), present.flag(s.get('success'))]
-                      for s in data['sources']], [24,65,28,24])
+        classifications = [[present.document(r['document_id']), r['first_page'], r['last_page'], present.kind(r.get('kind'))]
+                           for r in data.get('page_classification', [])]
+        if classifications:
+            detail_sheet(book, 'Jenis Dokumen per Halaman', ['Dokumen', 'Halaman awal', 'Halaman akhir', 'Jenis'],
+                         classifications, [48,16,16,28])
+        sources = [[present.web_source(s['id']), '\n'.join(s.get('urls') or []), s.get('checked_at', ''), present.flag(s.get('success'))]
+                   for s in data['sources']]
+        if sources:
+            detail_sheet(book, 'Sumber Daring', ['Sumber', 'Alamat situs', 'Waktu pemeriksaan', 'Sumber berhasil diakses'],
+                         sources, [24,65,28,24])
         metadata = [
             ['Referensi laporan', data['snapshot_sha256'][:16]], ['Proyek', data['project']],
             ['Tanggal acuan', data['assessment_date']], ['Disusun', data['created_at']],
-            ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')],
+            ['KAK', present.value(data['kak'].get('title'))], ['Versi KAK', present.value(data['kak'].get('version'))],
             ['Ketersediaan dan sumber KAK', present.status(data['kak'].get('status'))],
             ['Kelengkapan pemetaan KAK', present.status(data['kak'].get('coverage', {}).get('status'))],
             ['Dasar kelengkapan pemetaan KAK', present.narrative(data['kak'].get('coverage', {}).get('analysis', ''))],
@@ -141,10 +165,29 @@ def render(data, path):
             ['Pemeriksaan daring', 'Keberhasilan mengakses situs tidak membuktikan kebenaran seluruh informasi.'],
             ['Informasi belum didukung', 'Jumlah butir informasi yang belum didukung bukan jumlah dokumen yang harus dilengkapi.'],
             ['Pemeriksaan tidak diterapkan', 'Tidak berarti KAK pasti tidak mensyaratkannya. Periksa kelengkapan dan keterbacaan KAK.'],
-            *[['Keterbatasan', present.narrative(x)] for x in data['limitations']],
+            *[['Keterbatasan', x] for x in present.limitation_groups(data['limitations'])],
             *[['Dokumen sumber', f"{present.kind(d.get('kind'))} | {d['name']}"] for d in data['documents']],
         ]
         detail_sheet(book, 'Info Pemeriksaan', ['Item', 'Keterangan'], metadata, [32,100])
+        purposes = {
+            'Ringkasan Personel': 'Daftar personel dan kualifikasi utama.',
+            'Ringkasan Pemeriksaan': 'Kesimpulan dan angka pengalaman per personel.',
+            'Pemeriksaan KAK': 'Hasil terhadap persyaratan KAK yang tersedia.',
+            'Hasil Pemeriksaan': 'Lima belas aspek pemeriksaan per personel.',
+            'Pencocokan Dokumen': 'Ringkasan perbandingan CV dan dokumen pendukung.',
+            'Konfirmasi Data': 'Temuan yang sudah dikelompokkan untuk klarifikasi.',
+            'Pemeriksaan KAK Terperinci': 'Rincian persyaratan KAK yang diperiksa.',
+            'Pendidikan': 'Pendidikan dan bukti sumber.',
+            'Verifikasi Sertifikat': 'Identitas dan masa berlaku sertifikat.',
+            'Riwayat Pekerjaan': 'Pengalaman kerja dan bukti sumber.',
+            'Periode dan Pencatatan Ganda': 'Periode bertumpang tindih atau dugaan duplikasi.',
+            'Jenis Dokumen per Halaman': 'Klasifikasi halaman sumber.',
+            'Sumber Daring': 'Sumber pemeriksaan daring.',
+            'Info Pemeriksaan': 'Metadata, batas, dan keterbatasan pemeriksaan.',
+        }
+        contents = [[name, purposes.get(name, 'Bagian laporan.')] for name in book.sheetnames]
+        index_sheet = detail_sheet(book, 'Daftar Isi', ['Sheet', 'Isi'], contents, [42,80])
+        book.move_sheet(index_sheet, offset=-(len(book.sheetnames) - 1))
         book.save(path)
     finally:
         book.close()

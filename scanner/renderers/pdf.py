@@ -84,10 +84,10 @@ def render(data, path):
             'Kesesuaian belum dapat dinilai sampai pemetaan diperjelas.')
     else:
         add(present.narrative(data['kak'].get('analysis', '')))
-    for limitation in data['limitations']:
+    for limitation in present.limitation_groups(data['limitations']):
         if kak_unavailable and limitation == 'Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.':
             continue
-        field('Keterbatasan:', present.narrative(limitation))
+        field('Keterbatasan:', limitation)
     add('Identitas sertifikat, masa berlaku pada dokumen, dan kesesuaian terhadap KAK diperiksa secara terpisah. '
         'Data yang tidak ditemukan atau situs yang tidak dapat diakses bukan bukti pemalsuan.')
     add('2. Ringkasan per personel', heading)
@@ -97,7 +97,7 @@ def render(data, path):
         add(present.narrative(person['summary'], person))
 
     for number, person in enumerate(data['people'], 1):
-        story.append(PageBreak() if number == 1 else CondPageBreak(210))
+        story.append(CondPageBreak(210))
         add(f'3.{number} Pemeriksaan personel', heading)
         add(person['name'], title)
         field('Posisi yang diusulkan:', person['role'])
@@ -162,16 +162,20 @@ def render(data, path):
 
         if person.get('anomalies'):
             add('Informasi yang perlu dikonfirmasi', heading)
-        for index, anomaly in enumerate(present.anomaly_groups(person), 1):
-            add(f"{index}. {anomaly['label']}", sub)
-            field('Prioritas:', 'Penting untuk klarifikasi' if anomaly['material'] else 'Catatan pendukung')
+        anomaly_groups = present.anomaly_groups(person)
+        material_groups = [item for item in anomaly_groups if item['material']]
+        supporting_groups = [item for item in anomaly_groups if not item['material']]
+        for index, anomaly in enumerate(material_groups, 1):
+            parts = [f"{index}. {anomaly['label']}"]
             if anomaly['experience_ids']:
-                field('Pengalaman:', present.experiences(person, anomaly['experience_ids']))
+                parts.append(present.experiences(person, anomaly['experience_ids']))
             if anomaly['fields']:
-                field('Informasi yang diperiksa:', ', '.join(present.field(value) for value in anomaly['fields']))
-            add(anomaly['detail'])
-            if anomaly['material']:
-                field('Rujukan bukti:', present.reference_markers(person, anomaly['source_refs']))
+                parts.append(', '.join(present.field(value) for value in anomaly['fields']))
+            parts.extend((anomaly['detail'], present.reference_markers(person, anomaly['source_refs'])))
+            add(' | '.join(part for part in parts if part), small)
+        if supporting_groups:
+            count = sum(item['count'] for item in supporting_groups)
+            add(f'{count} catatan pendukung dikelompokkan. Rincian tersedia dalam workbook dan arsip audit.', small)
         final = person.get('final_conclusion', {})
         add('Kesimpulan pemenuhan KAK', heading)
         field('Hasil:', present.status(final.get('status', 'perlu_klarifikasi')))
@@ -196,12 +200,9 @@ def render(data, path):
         if chronology['uncertain_entries']:
             field('Jumlah periode yang belum dapat dihitung penuh:', len(chronology['uncertain_entries']))
             field('Pengalaman yang perlu dilengkapi periodenya:', present.uncertain_experiences(person))
-        for job in person['employment_history']:
-            add(present.experience(person, job.get('id')), sub)
-            field('Proyek / uraian tugas:', f"{job.get('project','-')} / {job.get('responsibilities','-')}")
-            for key in ('client', 'consultant', 'contractor', 'represented_organization'):
-                if job.get(key):
-                    field(present.field(key) + ':', job[key])
+        if person['employment_history']:
+            add(f"{len(person['employment_history'])} riwayat pekerjaan tersedia. Rincian proyek, peran, "
+                'organisasi, periode, dan bukti disajikan dalam workbook dan arsip audit.', small)
         facts = person.get('fact_analysis', {})
         overlaps = facts.get('overlaps', {}).get('pairs', [])
         duplicates = facts.get('duplicates', {}).get('pairs', [])
@@ -243,13 +244,6 @@ def render(data, path):
         for finding in person['findings'] or ['Tidak ada temuan tambahan yang dicatat; tetap periksa keterbatasan di atas.']:
             add(present.narrative(finding, person))
         add(present.narrative(person.get('review_note', ''), person), small)
-        evidence = present.evidence_index(person)
-        if evidence:
-            add('Indeks bukti personel', heading)
-            add('Penomoran Bxxx berlaku untuk personel ini. Setiap kutipan ditampilkan sekali.', small)
-            for evidence_number, ref in enumerate(evidence, 1):
-                add(f"B{evidence_number:03d} | {present.references([ref])}", small)
-
     story.append(PageBreak())
     add('4. Dokumen dan sumber pemeriksaan', heading)
     for doc in data['documents']:

@@ -87,6 +87,9 @@ def detail_sheet(workbook, name, headers, rows, widths=None):
     for index, width in enumerate(widths, 1):
         sheet.column_dimensions[sheet.cell(1, index).column_letter].width = width
     for row_index, values in enumerate([headers, *rows], 1):
+        if row_index > 1:
+            values = ['Belum tersedia' if value is None or (isinstance(value, str) and not value.strip()) else value
+                      for value in values]
         for col, value in enumerate(values, 1):
             cell = data_cell(sheet, row_index, col, value)
             cell.font = Font(name="Calibri", size=10, bold=row_index == 1, color="FFFFFF" if row_index == 1 else "17293D")
@@ -139,9 +142,10 @@ def personnel_workbook(payload):
         if years in (None, ""):
             years = calculate_years(months) if months not in (None, "") else ""
         minimum = person.get("pengalaman_min_kak_tahun", "")
-        values = [number, person.get("nama_personel", ""), str(person.get("nik", "")),
+        missing = 'Tidak ditemukan pada dokumen'
+        values = [number, person.get("nama_personel") or missing, str(person.get("nik") or missing),
                   person.get("jabatan_personel", ""), person.get("kualifikasi_pendidikan", ""),
-                  person.get("sertifikat_keahlian", ""), f"{minimum} Tahun" if minimum not in (None, "") else "",
+                  person.get("sertifikat_keahlian") or missing, f"{minimum} Tahun" if minimum not in (None, "") else "Belum tersedia",
                   months, format_indonesian_decimal(years) if years != "" else ""]
         for col, value in enumerate(values, 1):
             cell = data_cell(sheet, number + 5, col, value)

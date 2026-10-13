@@ -69,11 +69,21 @@ Nama lembar baru yang menggantikan lembar lama:
 - `Klasifikasi Halaman` menjadi `Jenis Dokumen per Halaman`.
 - `Sumber Web` menjadi `Sumber Daring`.
 
-`Ringkasan Personel`, `Pemeriksaan KAK`, `Pendidikan`, `Verifikasi Sertifikat`,
-`Riwayat Pekerjaan`, dan `Info Pemeriksaan` tetap tersedia. Kolom status internal,
+`Daftar Isi`, `Ringkasan Personel`, `Ringkasan Pemeriksaan`, dan `Info Pemeriksaan`
+selalu tersedia. Sheet detail lain hanya dibuat bila memiliki baris data. Konsumen
+otomatis harus memeriksa keberadaan sheet dan membaca judul kolom, bukan mengandalkan
+posisi atau daftar sheet tetap. Kolom status internal,
 status versi lama, kode audit, dan asal penilaian mesin tidak disertakan dalam
 workbook BD. Rincian tersebut tetap tersedia pada arsip lokal, bukan lembar
 tersembunyi dalam berkas yang dibagikan.
+
+Nilai yang tidak tersedia tidak ditampilkan sebagai sel data kosong. Laporan memakai
+`Tidak ditemukan pada dokumen`, `Belum tersedia`, `Tidak diterapkan`, atau
+`Tidak berlaku` sesuai konteks. Placeholder tidak boleh dianggap sebagai data sumber.
+
+Temuan berulang dikelompokkan pada PDF dan Excel. `review.json` tetap menyimpan setiap
+butir audit asli. Pencocokan pengalaman pada Excel diringkas per record; sertifikat
+tetap terpisah agar nomor atau bidang yang berbeda dapat dibedakan.
 
 ## Pengujian dan penambahan istilah
 
