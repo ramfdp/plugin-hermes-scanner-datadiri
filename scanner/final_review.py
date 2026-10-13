@@ -70,7 +70,8 @@ def _same(field, left, right):
     return bool(canonical_text(left)) and canonical_text(left) == canonical_text(right)
 
 
-def evaluate_cv_supporting_documents(identity, history, education_records, certificates):
+def evaluate_cv_supporting_documents(identity, history, education_records, certificates,
+                                     certificate_extraction=None):
     details, conflicts, missing = [], [], []
     all_refs = []
     comparable_count = 0
@@ -120,6 +121,14 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
 
     # Education claim in CV versus diploma/transcript references.
     identity_education = canonical_text(identity.get("education", ""))
+    if identity_education and not education_records:
+        comparable_count += 1
+        item = {
+            "field": "education", "cv_value": identity.get("education"),
+            "status": "missing_mapping", "source_refs": [],
+        }
+        missing.append(item)
+        details.append({"type": "education", "fields": [item]})
     for index, record in enumerate(education_records, 1):
         source_refs = record.get("source_refs", [])
         supporting_refs = record.get("supporting_refs", [])
@@ -164,6 +173,7 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
 
     # Certificate summary in CV versus mapped certificate attachments.
     summary = canonical_text(identity.get("certificate_summary", ""))
+    extraction = certificate_extraction
     all_refs.extend(_refs_from_certificates(certificates))
     if summary:
         comparable_count += 1
@@ -211,6 +221,16 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                 }
                 conflicts.append(item)
                 details.append({"type": "certificate", "fields": [item]})
+
+        if extraction and extraction.get("status") in {"partial", "claimed_not_extracted", "unknown"}:
+            item = {
+                "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
+                "status": "incomplete_mapping", "source_refs": _unique_refs(
+                    extraction.get("source_refs", []) + _refs_from_certificates(certificates)
+                ),
+            }
+            missing.append(item)
+            details.append({"type": "certificate", "fields": [item]})
 
     refs = _unique_refs(all_refs)
     if comparable_count == 0:
@@ -413,18 +433,23 @@ def final_conclusion(audit_checks, legacy_checks, requirements, kak):
     ]
     legacy_statuses = [check.get("status") for check in legacy_checks]
     has_kak_criteria = bool(requirements or legacy_checks)
+    coverage = kak.get("coverage") if isinstance(kak.get("coverage"), dict) else {}
+    coverage_complete = coverage.get("status") == "complete"
 
     if any(check.get("status") == "tidak_memenuhi" for check in considered) or "tidak_memenuhi" in legacy_statuses:
         status = "tidak_memenuhi"
         finding = "Setidaknya satu kriteria KAK yang berlaku berstatus Tidak Memenuhi."
-    elif (not has_kak_criteria or kak.get("status") == "tidak_tersedia" or
+    elif (not coverage_complete or kak.get("status") == "tidak_tersedia" or
           any(check.get("status") == "perlu_klarifikasi" for check in considered) or
           "belum_dapat_dinilai" in legacy_statuses):
         status = "perlu_klarifikasi"
-        if not has_kak_criteria or kak.get("status") == "tidak_tersedia":
+        if not coverage_complete or kak.get("status") == "tidak_tersedia":
             finding = "KAK/persyaratan yang dapat dipakai belum cukup untuk menyimpulkan pemenuhan."
         else:
             finding = "Tidak ada kriteria yang pasti Tidak Memenuhi, tetapi masih ada audit atau bukti yang memerlukan klarifikasi."
+    elif not has_kak_criteria:
+        status = "memenuhi"
+        finding = "Cakupan KAK lengkap dan tidak ada persyaratan yang berlaku untuk posisi personel ini."
     else:
         status = "memenuhi"
         finding = "Seluruh kriteria KAK yang berlaku dan seluruh audit yang relevan berstatus Memenuhi."
@@ -464,6 +489,7 @@ def finalize_person_review(person, requirements, kak, audit_checks, legacy_check
         person.get("employment_history", []),
         person.get("education_records", []),
         person.get("certificates", []),
+        person.get("certificate_extraction"),
     )
     person["document_cross_check"] = {
         key: value for key, value in cross_check.items() if key != "check"

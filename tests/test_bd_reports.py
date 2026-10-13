@@ -152,7 +152,7 @@ class BDPresentationTest(unittest.TestCase):
     def test_no_kak_detail_is_not_claimed_to_be_no_requirement(self):
         check = next(c for c in self.person['audit_checks'] if c['code'] == 'technical_competency_match')
         view = self.present.check(check)
-        self.assertEqual(view['status'], 'Tidak diterapkan')
+        self.assertEqual(view['status'], 'Belum dapat dinilai')
         self.assertIn('tidak menyatakan bahwa KAK pasti tidak mensyaratkannya', view['analysis'])
         self.assertFalse(check['applicable'])
         self.assertIsNone(check['status'])
@@ -345,6 +345,34 @@ class BDExportTest(unittest.TestCase):
         self.assertIn('CV Contoh.pdf, halaman 1:', text)
         self.assertTrue(any('KAK Contoh.pdf, halaman 2:' in str(row[-1]) for row in rows))
         self.assertIn('40 butir informasi', text)
+
+    def test_all_fifteen_criteria_are_visible_for_complete_missing_and_partial_kak(self):
+        scenarios = (
+            ('complete', self.data['requirements']),
+            ('incomplete', self.data['requirements']),
+            ('unavailable', []),
+        )
+        for status, requirements in scenarios:
+            with self.subTest(status=status):
+                self.data['requirements'] = copy.deepcopy(requirements)
+                self.data['kak']['coverage'] = {
+                    'status': status, 'analysis': f'Cakupan sintetis {status}.',
+                    'source_refs': [], 'mapped_requirement_ids': [],
+                }
+                pdf_path = self.root / f'{status}.pdf'
+                xlsx_path = self.root / f'{status}.xlsx'
+                pdf.render(self.data, pdf_path)
+                xlsx.render(self.data, xlsx_path)
+                text = ' '.join(pdf_text(pdf_path).split())
+                book = load_workbook(xlsx_path, data_only=True)
+                try:
+                    rows = list(book['Hasil Pemeriksaan'].iter_rows(min_row=2, values_only=True))
+                    self.assertEqual(len(rows), 15)
+                    self.assertEqual([row[3] for row in rows], list(AUDIT_LABELS.values()))
+                    for label in AUDIT_LABELS.values():
+                        self.assertIn(label, text)
+                finally:
+                    book.close()
 
     def test_pdf_evidence_markers_resolve_to_scoped_labeled_index_entries(self):
         person = self.data['people'][0]

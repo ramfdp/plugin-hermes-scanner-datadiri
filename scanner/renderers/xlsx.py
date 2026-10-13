@@ -45,12 +45,6 @@ def render(data, path):
                 check_rows.append([*who, check['requirement'], view['status'], view['finding'], view['analysis'],
                                    view['clarification'], view['evidence']])
             for check in person.get('audit_checks', []):
-                if kak_unavailable and check.get('applicable') is False and check.get('code') in {
-                    'position_experience_match', 'project_kak_match', 'organization_role_match',
-                    'experience_duration_match', 'responsibility_position_match', 'education_major_match',
-                    'certificate_kak_validity', 'technical_competency_match',
-                }:
-                    continue
                 view = present.check(check, person)
                 audit_rows.append([*who, view['label'], view['status'], view['finding'], view['analysis'],
                                    view['clarification'], view['evidence'], view['kak_evidence']])
@@ -139,6 +133,9 @@ def render(data, path):
             ['Tanggal acuan', data['assessment_date']], ['Disusun', data['created_at']],
             ['KAK', data['kak'].get('title', '')], ['Versi KAK', data['kak'].get('version', '')],
             ['Ketersediaan dan sumber KAK', present.status(data['kak'].get('status'))],
+            ['Kelengkapan pemetaan KAK', present.status(data['kak'].get('coverage', {}).get('status'))],
+            ['Dasar kelengkapan pemetaan KAK', present.narrative(data['kak'].get('coverage', {}).get('analysis', ''))],
+            ['Bukti cakupan KAK', present.references(data['kak'].get('coverage', {}).get('source_refs', []))],
             ['Penjelasan KAK', present.narrative(data['kak'].get('analysis', ''))],
             ['Batas pemeriksaan', 'Bantuan pemeriksaan dokumen, bukan keputusan menerima/menolak personel.'],
             ['Pemeriksaan daring', 'Keberhasilan mengakses situs tidak membuktikan kebenaran seluruh informasi.'],

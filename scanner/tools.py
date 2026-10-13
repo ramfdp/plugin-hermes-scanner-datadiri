@@ -21,7 +21,7 @@ def _child_env(project_dir):
 
 def _parse_result(process, prefix):
     marker = f"HERMES_{prefix}_RESULT="
-    diagnostics = {"return_code": process.returncode, "stdout": process.stdout[-3000:], "stderr": process.stderr[-3000:]}
+    diagnostics = {"return_code": process.returncode}
     for line in reversed(process.stdout.splitlines()):
         if line.startswith(marker):
             try:
@@ -34,7 +34,6 @@ def _parse_result(process, prefix):
             if process.returncode != 0:
                 parsed["success"] = False
                 parsed.setdefault("error", f"{prefix}_PROCESS_FAILED")
-                parsed["stderr"] = process.stderr[-3000:]
             return parsed
     return {"success": False, "error": f"{prefix}_RESULT_NOT_FOUND", **diagnostics}
 

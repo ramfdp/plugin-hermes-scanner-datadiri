@@ -128,10 +128,10 @@ def render(data, path):
                 'experience_duration_match', 'responsibility_position_match', 'education_major_match',
                 'certificate_kak_validity', 'technical_competency_match',
             }:
-                if kak_unavailable:
-                    continue
                 unavailable_kak += 1
                 field(view['label'] + ':', view['status'])
+                if view['finding']:
+                    add(view['finding'], small)
                 continue
             field(view['label'] + ':', view['status'])
             if check.get('status') != 'memenuhi' and view['finding']:

@@ -43,7 +43,11 @@ def plan_payload():
                'certificate_inventory': [{'id': f'C{i+1}', 'source_refs': [ref('D003', i+1, CERT_PAGES[i])]}]}
               for i, letter in enumerate('AB')]
     return {'kak': {'title': 'KAK Paket Uji', 'version': 'Versi 1', 'package_id': 'PKT-UJI',
-                    'analysis': 'Dokumen uji sintetis; bukan hasil pemeriksaan KAK atau sertifikat orang sungguhan.', 'receipt_ids': []},
+                    'analysis': 'Dokumen uji sintetis; bukan hasil pemeriksaan KAK atau sertifikat orang sungguhan.', 'receipt_ids': [],
+                    'coverage': {'status': 'complete', 'mapped_requirement_ids': ['R1'],
+                                 'identified_clause_count': 1,
+                                 'analysis': 'Seluruh halaman KAK sintetis dan butir persyaratan telah ditinjau.',
+                                 'source_refs': [ref('D002', 1, KAK)]}},
             'requirements': [{'id': 'R1', 'role': 'Engineer', 'kind': 'education', 'text': 'S1 Teknik Sipil',
                                'minimum_months': None, 'source_refs': [ref('D002', 1, 'S1 Teknik Sipil')]}],
             'roster': roster,
@@ -69,6 +73,9 @@ def person_payload(i):
                               'scheme': 'Skema Contoh', 'issuer': 'Penerbit Contoh', 'issued_on': None, 'expires_on': None,
                               'analysis': 'Lampiran memuat nomor dan identitas sertifikat, tetapi keabsahan dan masa berlaku belum dapat disimpulkan tanpa bukti portal.',
                               'source_refs': [ref('D003', i+1, CERT_PAGES[i])]}],
+            'certificate_extraction': {'status': 'complete', 'identified_count': 1,
+                                       'analysis': 'Seluruh klaim sertifikat pada CV sintetis telah dipetakan.',
+                                       'source_refs': [ref('D001', i+1, 'Skema Contoh')]},
             'certificate_limitation': '', 'findings': ['Ijazah dan bukti hubungan kerja belum disertakan.']}
 
 

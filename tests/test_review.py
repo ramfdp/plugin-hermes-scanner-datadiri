@@ -100,6 +100,11 @@ class ReviewTest(unittest.TestCase):
             if i == 1:
                 person['certificates'] = []
                 person['certificate_limitation'] = 'Lampiran sertifikat tidak terbaca.'
+                person['certificate_extraction'] = {
+                    'status': 'claimed_not_extracted', 'identified_count': 1,
+                    'analysis': 'CV menyatakan sertifikat, tetapi lampiran sintetis tidak terbaca.',
+                    'source_refs': [{'document_id': 'D001', 'page': 2, 'quote': 'Skema Contoh'}],
+                }
             review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
         data = review.snapshot(storage.run_dir(rid))
         self.assertTrue(any('unreadable' in x for x in data['limitations']))
@@ -129,6 +134,11 @@ class ReviewTest(unittest.TestCase):
         plan = plan_payload()
         plan['requirements'] = []
         plan['kak']['analysis'] = 'KAK tidak dapat digunakan; persyaratan belum dapat dinilai pada pengujian ini.'
+        plan['kak']['coverage'] = {
+            'status': 'incomplete', 'mapped_requirement_ids': [],
+            'analysis': 'Dokumen KAK tersedia, tetapi pemetaan persyaratan sengaja tidak lengkap.',
+            'source_refs': [{'document_id': 'D002', 'page': 1, 'quote': 'KAK Paket Uji Versi 1'}],
+        }
         review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan})
         person = person_payload(0)
         person['checks'] = []

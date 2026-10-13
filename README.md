@@ -109,6 +109,10 @@ OCR offline **tidak berarti seluruh workflow offline**. Teks yang diteruskan ke 
 Hermes; web/browser mengikuti provider tool. Pilihan web mengizinkan nomor sertifikat ke portal resmi.
 NIK pada keluaran disamarkan. Guard permintaan web adalah pengaman tambahan, bukan sistem DLP/sandbox.
 Plugin tidak menonaktifkan redactor. Dokumen/web diperlakukan sebagai data tidak tepercaya.
+Pergantian entry point ke `run_native` hanya mempertahankan worker progress; ini bukan bukti redactor dilewati.
+Repository tidak memuat konfigurasi redactor khusus tool yang terdokumentasi resmi. Perilaku redactor host harus
+dibuktikan pada Hermes Desktop; jangan menambahkan pengecualian global atau menonaktifkan perlindungan PII.
+Kegagalan subprocess hanya mengembalikan kode hasil/return code, bukan salinan stdout/stderr yang dapat memuat data sumber.
 
 Lihat [MIGRATION.md](docs/MIGRATION.md), [DEBUGGING.md](docs/DEBUGGING.md) dan
 [REVIEW_FORMAT.md](docs/REVIEW_FORMAT.md). Jalankan `python scripts/doctor.py` untuk diagnostik tanpa API key.
@@ -133,3 +137,5 @@ Requirement KAK dapat diberi `audit_code` untuk delapan pemeriksaan: posisi vs p
 Seluruh 15 audit kini aktif. #13 membandingkan klaim CV/riwayat/pendidikan/sertifikat dengan dokumen pendukung terstruktur. Konflik atau bukti yang belum lengkap menghasilkan `Perlu Klarifikasi`, bukan tuduhan pemalsuan. #14 menggabungkan anomali periode, konsistensi, overlap, duplikasi, cross-check dokumen, dan perbedaan klaim durasi. #15 menghasilkan tepat satu dari `Memenuhi`, `Tidak Memenuhi`, atau `Perlu Klarifikasi`.
 
 Aturan final: adanya `tidak_memenuhi` pada kriteria yang berlaku menghasilkan `Tidak Memenuhi`; bila tidak ada kegagalan tetapi masih ada klarifikasi/anomali, hasil `Perlu Klarifikasi`; hanya seluruh audit yang relevan selesai dan memenuhi yang menghasilkan `Memenuhi`. Tidak adanya KAK tidak pernah dianggap memenuhi.
+
+Run baru menyimpan `kak.coverage` dan `certificate_extraction` dengan bukti halaman. Requirement non-kosong atau daftar sertifikat kosong tidak dianggap bukti kelengkapan/kekosongan. Checkpoint lama tanpa metadata tetap terbaca, tetapi diperlakukan `unknown`. Kedua laporan bisnis selalu memuat 15 pemeriksaan; cakupan belum lengkap tampil **Belum dapat dinilai**, bukan **Tidak diterapkan** atau **Memenuhi**.

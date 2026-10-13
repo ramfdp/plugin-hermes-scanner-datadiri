@@ -333,7 +333,8 @@ def _cert_matches(cert, params):
     )
 
 
-def certificate_details(requirements, role, certificates):
+def certificate_details(requirements, role, certificates, extraction=None):
+    extraction = extraction or {"status": "unknown"}
     rows = []
     for req in requirements:
         if req.get("audit_code") != "certificate_kak_validity" or not applicable(req, role):
@@ -341,10 +342,16 @@ def certificate_details(requirements, role, certificates):
         params = req.get("parameters", {})
         candidates = [cert for cert in certificates if _cert_matches(cert, params)]
         refs = _unique_refs([ref for cert in (candidates or certificates) for ref in cert.get("source_refs", [])])
-        if not certificates:
+        if not certificates and extraction.get("status") == "no_certificates_declared":
             status = "tidak_memenuhi"
-            finding = "Tidak ada sertifikat yang dipetakan untuk requirement KAK ini."
+            finding = "CV telah ditinjau lengkap dan tidak menyatakan sertifikat untuk requirement KAK ini."
             clarification = ""
+            refs = _unique_refs(extraction.get("source_refs", []))
+        elif not certificates:
+            status = "perlu_klarifikasi"
+            finding = "Belum ada sertifikat terstruktur; kelengkapan ekstraksi atau pemetaan sertifikat belum dipastikan."
+            clarification = "Selesaikan ekstraksi dan pemetaan seluruh klaim sertifikat sebelum menetapkan ketiadaan."
+            refs = _unique_refs(extraction.get("source_refs", []))
         elif not candidates:
             status = "perlu_klarifikasi"
             finding = "Ada sertifikat, tetapi tidak ada kecocokan exact skema/jenjang/penerbit terhadap parameter KAK."
@@ -386,7 +393,10 @@ def compute_kak_matching(requirements, role, history, chronology, education_reco
     details = semantic
     details.extend(duration_details(requirements, role, history, chronology, evaluation_context))
     details.extend(education_details(requirements, role, education_records))
-    details.extend(certificate_details(requirements, role, certificates))
+    details.extend(certificate_details(
+        requirements, role, certificates,
+        (evaluation_context or {}).get("certificate_extraction"),
+    ))
     order = {item["code"]: item["number"] for item in AUDIT_CRITERIA}
     details.sort(key=lambda item: (order[item["code"]], item["requirement_id"]))
     checks = [_aggregate(code, [item for item in details if item["code"] == code])

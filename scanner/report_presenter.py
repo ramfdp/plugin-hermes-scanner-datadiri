@@ -5,6 +5,7 @@ labels and explanations; it never computes a status or changes evidence.
 """
 import logging
 import re
+from .evaluation import KAK_MATCH_CODES
 from .report_labels import (
     ANOMALY_LABELS, AUDIT_LABELS, DUPLICATE_LABELS, FIELD_LABELS, KIND_LABELS,
     NARRATIVE_TERMS, PRECISION_LABELS, SENTENCE_LABELS, STATUS_LABELS,
@@ -43,6 +44,8 @@ class ReportPresenter:
         self.requirements = {r['id']: chr(34) + r['text'] + chr(34) for r in data.get('requirements', [])}
         self.people = {p['id']: p.get('name') or 'Personel tanpa nama' for p in data.get('people', [])}
         self.web_sources = {s['id']: f"Sumber daring {i}" for i, s in enumerate(data.get('sources', []), 1)}
+        coverage = data.get('kak', {}).get('coverage', {})
+        self.kak_coverage_complete = isinstance(coverage, dict) and coverage.get('status') == 'complete'
         literals = set()
 
         def collect(value):
@@ -337,9 +340,13 @@ class ReportPresenter:
             analysis = ('Penilaian aspek ini tidak dijalankan pada hasil pemeriksaan ini. '
                         'Hal ini tidak menyatakan bahwa KAK pasti tidak mensyaratkannya. '
                         'Periksa kembali kelengkapan dan keterbacaan KAK.')
+        applicable = check.get('applicable', True)
+        display_status = ('Belum dapat dinilai' if applicable is False and
+                          check.get('code') in KAK_MATCH_CODES and not self.kak_coverage_complete else
+                          self.status(check.get('status'), applicable))
         return {
             'label': self.audit_label(check['code']) if check.get('code') else 'Pemeriksaan persyaratan KAK',
-            'status': self.status(check.get('status'), check.get('applicable', True)),
+            'status': display_status,
             'finding': finding, 'analysis': analysis,
             'clarification': self.narrative(check.get('clarification', ''), person),
             'evidence': self.references(check.get('source_refs', [])),

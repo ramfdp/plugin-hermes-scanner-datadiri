@@ -182,7 +182,7 @@ class RuntimeTest(unittest.TestCase):
                 result, _ = self.invoke(prefix, f'HERMES_{prefix}_RESULT={value}')
                 self.assertEqual(result['error'], f'{prefix}_INVALID_RESULT')
             result, _ = self.invoke(prefix, 'x' * 6000)
-            self.assertEqual(result['error'], f'{prefix}_RESULT_NOT_FOUND'); self.assertLessEqual(len(result['stdout']), 3000)
+            self.assertEqual(result['error'], f'{prefix}_RESULT_NOT_FOUND'); self.assertNotIn('stdout', result); self.assertNotIn('stderr', result)
 
     def test_empty_text_and_export_file(self):
         for text in (None, '', ' ', []):

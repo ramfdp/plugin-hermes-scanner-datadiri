@@ -147,6 +147,8 @@ def snapshot(root):
             limitations.append(f"{row['document_id']} halaman {row['first_page']}-{row['last_page']}: jenis halaman belum teridentifikasi.")
     if not plan['requirements']:
         limitations.append('Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.')
+    if plan['kak'].get('coverage', {}).get('status') != 'complete':
+        limitations.append('Cakupan ekstraksi dan pemetaan persyaratan KAK belum lengkap atau belum diketahui.')
     if not manifest['allow_web']:
         limitations.append('Pemeriksaan daring tidak diizinkan; sertifikat/perusahaan belum diverifikasi secara daring.')
     receipt_ids = set(plan['kak'].get('receipt_ids', []))
@@ -159,6 +161,10 @@ def snapshot(root):
             limitations.append(f"{person['id']}: sebagian kriteria memerlukan klarifikasi.")
         if not person['certificates']:
             limitations.append(f"{person['id']}: sertifikat tidak tersedia/terbaca untuk pemeriksaan.")
+        if person.get('certificate_extraction', {}).get('status') in {
+            'partial', 'claimed_not_extracted', 'unknown'
+        }:
+            limitations.append(f"{person['id']}: kelengkapan ekstraksi sertifikat memerlukan klarifikasi.")
         for cert in person['certificates']:
             if cert['status'] != 'terverifikasi':
                 limitations.append(f"{person['id']}: identitas setidaknya satu sertifikat belum sepenuhnya terverifikasi.")

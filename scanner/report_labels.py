@@ -32,7 +32,11 @@ STATUS_LABELS = {
     'identitas_paket_dan_versi_ditemukan_pada_sumber': 'Identitas paket dan versi ditemukan pada sumber daring',
     'match': 'Sesuai', 'conflict': 'Berbeda; perlu dikonfirmasi',
     'missing_support': 'Bukti pendukung belum tersedia untuk informasi ini',
+    'missing_mapping': 'Pemetaan belum tersedia untuk informasi ini',
     'incomplete_mapping': 'Pemetaan belum lengkap; perlu klarifikasi',
+    'complete': 'Lengkap dan didukung bukti halaman',
+    'incomplete': 'Belum lengkap', 'unknown': 'Belum diketahui',
+    'unavailable': 'Dokumen tidak tersedia', 'unreadable': 'Dokumen tersedia tetapi tidak terbaca',
     'support_does_not_show_value': 'Informasi belum ditemukan pada dokumen pendukung',
     'cv_does_not_show_value': 'Informasi belum ditemukan pada CV',
 }

@@ -69,7 +69,12 @@ class FinalReviewV070Test(unittest.TestCase):
         plan = {
             'kak': {'title': 'KAK Posisi Engineer', 'version': '1', 'package_id': 'PKT-070',
                     'analysis': 'KAK sintetis memuat delapan requirement structured matching untuk final review.',
-                    'receipt_ids': []},
+                    'receipt_ids': [],
+                    'coverage': {'status': 'complete',
+                                 'mapped_requirement_ids': ['R1', 'R2', 'R3', 'R5', 'R6', 'R7', 'R8', 'R12'],
+                                 'identified_clause_count': 8,
+                                 'analysis': 'Seluruh halaman dan delapan requirement KAK sintetis telah ditinjau.',
+                                 'source_refs': [self.ref(4, 'KAK POSISI ENGINEER')]}},
             'requirements': [
                 {'id': 'R1', 'role': 'Engineer', 'kind': 'experience',
                  'audit_code': 'position_experience_match',
@@ -206,6 +211,11 @@ class FinalReviewV070Test(unittest.TestCase):
                 'analysis': 'Sertifikat sintetis memuat skema dan jenjang yang dapat dibandingkan dengan requirement KAK.',
                 'source_refs': [self.ref(3, 'CERT-001 Personel Final Ahli Teknik Jembatan BNSP Level 7')],
             }],
+            'certificate_extraction': {
+                'status': 'complete', 'identified_count': 1,
+                'analysis': 'Seluruh klaim sertifikat pada CV sintetis telah dipetakan.',
+                'source_refs': [self.ref(1, 'Personel Final')],
+            },
             'certificate_limitation': '',
             'findings': [],
             'audit_checks': [],
@@ -258,6 +268,10 @@ class FinalReviewV070Test(unittest.TestCase):
         rid = create_run(self.root)
         plan = plan_payload()
         plan['requirements'] = []
+        plan['kak']['coverage'] = {'status': 'incomplete', 'mapped_requirement_ids': [],
+                                   'analysis': 'KAK tersedia, tetapi requirement sengaja tidak dipetakan pada skenario uji.',
+                                   'source_refs': [{'document_id': 'D002', 'page': 1,
+                                                    'quote': 'KAK Paket Uji Versi 1'}]}
         plan['kak']['analysis'] = 'Tidak ada persyaratan KAK yang digunakan pada pengujian final conclusion ini.'
         review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan})
         person = person_payload(0)

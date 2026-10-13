@@ -78,3 +78,7 @@ Prioritas kesimpulan:
 3. hanya seluruh kriteria yang berlaku selesai dan memenuhi -> **Memenuhi**.
 
 `report_complete` tetap menyatakan kelengkapan proses/artefak, bukan hasil pemenuhan KAK. Gunakan `final_conclusion` untuk keputusan audit dokumen.
+
+Plan baru wajib menyatakan `kak.coverage` beserta bukti setiap halaman KAK/addendum dan ID requirement yang dipetakan. Nilai `complete` kontradiktif ditolak. Metadata lama tanpa field ini dibaca sebagai `unknown`, sehingga tidak dapat menghasilkan **Memenuhi**. KAK lengkap tanpa requirement yang berlaku dilaporkan eksplisit; KAK parsial tidak boleh diperlakukan demikian.
+
+Review personel wajib menyatakan `certificate_extraction`. Sertifikat kosong hanya menjadi **Tidak Memenuhi** bila `no_certificates_declared` didukung pembacaan CV lengkap. Ekstraksi `partial`, `claimed_not_extracted`, atau `unknown` menghasilkan **Perlu Klarifikasi**. Setiap klaim pendidikan dan sertifikat dipetakan sendiri; CV tidak dipakai sebagai bukti independen atas klaimnya sendiri.

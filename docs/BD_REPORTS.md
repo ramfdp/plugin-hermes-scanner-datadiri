@@ -93,3 +93,5 @@ dan uji di `tests/test_bd_reports.py`. Kode yang belum dikenali mendapat
 keterangan untuk ditinjau dan peringatan pada log, bukan dicetak mentah atau
 diasumsikan memenuhi. Narasi bebas baru tetap perlu diperiksa bahasanya; kamus
 ini tidak menerjemahkan sembarang dokumen sumber.
+
+PDF dan XLSX selalu menampilkan 15 pemeriksaan dalam urutan nomor yang sama. Aspek KAK tanpa requirement tampil **Belum dapat dinilai** bila cakupan KAK belum lengkap, atau **Tidak diterapkan** hanya bila cakupan lengkap membuktikan tidak ada requirement terkait. Rendering tidak mengubah status audit pada `review.json`. Bukti halaman cakupan KAK tampil pada informasi pemeriksaan.

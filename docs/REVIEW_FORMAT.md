@@ -250,3 +250,25 @@ Contoh output personel tersimpan:
 ```
 
 Aturan agregasi final bersifat deterministik: `tidak_memenuhi` mengalahkan `perlu_klarifikasi`; `perlu_klarifikasi` mengalahkan `memenuhi`. KAK/persyaratan yang tidak tersedia selalu menghasilkan **Perlu Klarifikasi**, tidak pernah **Memenuhi**. `report_complete` dan keberhasilan membuat dua file tetap terpisah dari `final_conclusion`.
+
+### Metadata kelengkapan KAK dan sertifikat
+
+Run baru wajib mengirim `kak.coverage`:
+
+```json
+{"status":"complete","analysis":"Semua halaman KAK/addendum ditinjau.",
+ "source_refs":[{"document_id":"D001","page":4,"quote":"KAK ..."}],
+ "identified_clause_count":2,
+ "mapped_requirement_ids":["R1","R2"]}
+```
+
+`status`: `unavailable`, `unreadable`, `incomplete`, `complete`, atau `unknown` untuk checkpoint lama. `complete` diterima hanya bila bukti mencakup semua halaman KAK/addendum dan ID tepat sama dengan requirement yang dipetakan. Array requirement non-kosong tidak membuktikan kelengkapan. Metadata lama yang hilang menjadi `unknown`; kesimpulan tidak dapat menjadi **Memenuhi**.
+
+Setiap personel wajib mengirim `certificate_extraction`:
+
+```json
+{"status":"complete","identified_count":2,"analysis":"Dua klaim CV dipetakan.",
+ "source_refs":[{"document_id":"D001","page":2,"quote":"Sertifikat A; Sertifikat B"}]}
+```
+
+`status`: `complete`, `no_certificates_declared`, `partial`, `claimed_not_extracted`, atau `unknown`. `certificates=[]` saja tidak membuktikan ketiadaan. `no_certificates_declared` memerlukan bukti CV dan tidak boleh bertentangan dengan ringkasan/inventory. Identitas portal, masa berlaku berdasarkan tanggal dokumen, kecocokan KAK, dan status pencabutan tetap hasil terpisah.

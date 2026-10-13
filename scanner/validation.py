@@ -1,7 +1,7 @@
 import copy
 import re
 from datetime import date
-from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids,
+from .evaluation import (AUDIT_CRITERIA, KAK_MATCH_CODES, SERVER_AUDIT_CODES, assign_experience_ids, canonical_text,
                          evaluate_history_facts, partial_date, supported_period_months, validate_audit_checks)
 from .kak_matching import (SEMANTIC_MATCH_CODES, applicable, compute_kak_matching,
                            validate_requirement_extension, validate_semantic_assessments)
@@ -164,6 +164,49 @@ def validate_plan(root, manifest, payload):
     require_text(kak.get("analysis"), "kak.analysis", 20)
     has_kak_pages = any(row["kind"] == "kak" for row in classification)
     kak["status"] = "dokumen_diberikan_belum_diautentikasi" if has_kak_pages else "tidak_tersedia"
+    coverage = kak.get("coverage")
+    if coverage is None:
+        coverage = {
+            "status": "unknown", "source_refs": [], "mapped_requirement_ids": [],
+            "analysis": "Metadata cakupan ekstraksi KAK belum tersedia; kelengkapan diperlakukan belum diketahui.",
+        }
+    elif not isinstance(coverage, dict):
+        raise ValueError("kak.coverage harus object")
+    else:
+        coverage = copy.deepcopy(coverage)
+        if coverage.get("status") not in {"unavailable", "unreadable", "incomplete", "complete", "unknown"}:
+            raise ValueError("kak.coverage.status tidak valid")
+        require_text(coverage.get("analysis"), "kak.coverage.analysis", 20)
+        coverage_refs = source_refs(
+            root, manifest, coverage.get("source_refs", []),
+            required=coverage["status"] in {"incomplete", "complete"},
+            kinds=REFERENCE_PAGE_KINDS, page_classification=classification,
+        )
+        mapped = coverage.get("mapped_requirement_ids", [])
+        if not isinstance(mapped, list) or any(not isinstance(x, str) for x in mapped) or len(mapped) != len(set(mapped)):
+            raise ValueError("kak.coverage.mapped_requirement_ids harus array ID unik")
+        requirement_ids = {item["id"] for item in requirements}
+        if not set(mapped) <= requirement_ids:
+            raise ValueError("kak.coverage memetakan requirement tidak dikenal")
+        clause_count = coverage.get("identified_clause_count")
+        if clause_count is not None and (type(clause_count) is not int or clause_count < 0):
+            raise ValueError("kak.coverage.identified_clause_count harus integer nonnegatif atau null")
+        reference_pages = {
+            (row["document_id"], page)
+            for row in classification if row["kind"] in REFERENCE_PAGE_KINDS
+            for page in range(row["first_page"], row["last_page"] + 1)
+        }
+        reviewed_pages = {(item["document_id"], item["page"]) for item in coverage_refs}
+        if coverage["status"] == "unavailable" and reference_pages:
+            raise ValueError("kak.coverage unavailable bertentangan dengan halaman KAK/addendum")
+        if coverage["status"] == "complete":
+            if not reference_pages or reviewed_pages != reference_pages:
+                raise ValueError("kak.coverage complete harus membuktikan setiap halaman KAK/addendum")
+            if set(mapped) != requirement_ids:
+                raise ValueError("kak.coverage complete harus memetakan seluruh requirement yang diekstrak")
+            if clause_count != len(requirements):
+                raise ValueError("kak.coverage complete harus mencocokkan jumlah klausul dan requirement")
+    kak["coverage"] = coverage
     # A matching public package can support provenance, never blanket legal validity.
     for rid in kak.get("receipt_ids", []):
         receipt = read_receipt(root, rid)
@@ -538,12 +581,54 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
     if not certificates:
         require_text(person.get('certificate_limitation'), 'certificate_limitation')
     person['certificates'] = [certificate_result(root, manifest, cert, person['name'], assessment_date) for cert in certificates]
+    certificate_extraction = person.get('certificate_extraction')
+    if certificate_extraction is None:
+        certificate_extraction = {
+            'status': 'unknown', 'identified_count': None, 'source_refs': [],
+            'analysis': 'Kelengkapan ekstraksi klaim sertifikat belum dinyatakan.',
+        }
+    elif not isinstance(certificate_extraction, dict):
+        raise ValueError('certificate_extraction harus object')
+    else:
+        certificate_extraction = copy.deepcopy(certificate_extraction)
+        if certificate_extraction.get('status') not in {
+            'complete', 'no_certificates_declared', 'partial', 'claimed_not_extracted', 'unknown'
+        }:
+            raise ValueError('certificate_extraction.status tidak valid')
+        require_text(certificate_extraction.get('analysis'), 'certificate_extraction.analysis', 20)
+        count = certificate_extraction.get('identified_count')
+        if count is not None and (type(count) is not int or count < 0):
+            raise ValueError('certificate_extraction.identified_count harus integer nonnegatif atau null')
+        extraction_refs = source_refs(
+            root, manifest, certificate_extraction.get('source_refs', []),
+            required=not stored and certificate_extraction['status'] != 'unknown',
+            kinds={'cv'}, page_classification=classification,
+        )
+        own_refs(extraction_refs)
+        contradiction = (
+            certificate_extraction['status'] == 'complete' and count != len(inventory) or
+            certificate_extraction['status'] == 'no_certificates_declared' and
+            (inventory or canonical_text(person['identity'].get('certificate_summary', ''))) or
+            certificate_extraction['status'] == 'claimed_not_extracted' and not
+            canonical_text(person['identity'].get('certificate_summary', '')) or
+            certificate_extraction['status'] == 'partial' and
+            (count is None or count <= len(inventory))
+        )
+        if contradiction:
+            if not stored:
+                raise ValueError('certificate_extraction bertentangan dengan klaim atau inventory sertifikat')
+            certificate_extraction.update(
+                status='unknown', identified_count=None,
+                analysis='Status ekstraksi sertifikat tersimpan bertentangan; ditafsirkan konservatif saat ekspor.',
+            )
+    person['certificate_extraction'] = certificate_extraction
 
     kak_matching = compute_kak_matching(
         plan['requirements'], person['role'], history, person['chronology'],
         education_records, person['certificates'], semantic_assessments, {
             'history_extraction': extraction,
             'relevance_assessed': relevance_assessed,
+            'certificate_extraction': certificate_extraction,
         })
     person['kak_match_details'] = kak_matching['details']
 
