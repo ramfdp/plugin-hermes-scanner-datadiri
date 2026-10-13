@@ -64,6 +64,16 @@ def _quote_text(refs):
     return canonical_text(" ".join(ref.get("quote", "") for ref in refs))
 
 
+def _certificate_label(claim):
+    title = claim.get('title') or claim.get('scheme') or 'tanpa nama yang terbaca'
+    parts = [f"Sertifikat {title.strip()}"]
+    for field, label in (("number", "Nomor"), ("level", "Jenjang"), ("issuer", "Penerbit")):
+        value = claim.get(field)
+        if isinstance(value, str) and value.strip():
+            parts.append(f"{label} {value.strip()}")
+    return ", ".join(parts)
+
+
 def _same(field, left, right):
     if field in {"start_date", "end_date"}:
         return date_values_compatible(left, right)
@@ -185,13 +195,13 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
             all_refs.extend(refs)
             item = {
                 "claim_id": claim.get("id"), "inventory_id": claim.get("inventory_id"),
-                "field": "certificate", "cv_value": claim.get("title", ""), "source_refs": refs,
+                "field": "certificate", "cv_value": _certificate_label(claim), "source_refs": refs,
             }
             if not cert or cert.get("independent_support") is not True:
                 item["status"] = "missing_support"
                 missing.append(item)
             elif not all(canonical_text(cert.get(field, "")) for field in ("number", "holder", "scheme")):
-                item["status"] = "missing_critical_fields"
+                item.update(status="missing_critical_fields", support_value=_certificate_label(cert))
                 missing.append(item)
             else:
                 comparisons = [("title", "scheme"), ("number", "number"),
@@ -200,7 +210,8 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                               if canonical_text(claim.get(claim_field, "")) and
                               canonical_text(claim.get(claim_field, "")) != canonical_text(cert.get(cert_field, ""))]
                 if mismatches:
-                    item.update(status="conflict", conflicting_fields=mismatches)
+                    item.update(status="conflict", conflicting_fields=mismatches,
+                                support_value=_certificate_label(cert))
                     conflicts.append(item)
                 else:
                     item.update(status="match", support_value=cert.get("scheme", ""))
@@ -253,15 +264,16 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                 conflicts.append(item)
                 details.append({"type": "certificate", "fields": [item]})
 
-        if extraction and extraction.get("status") in {"partial", "claimed_not_extracted", "unknown"}:
-            item = {
-                "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
-                "status": "incomplete_mapping", "source_refs": _unique_refs(
-                    extraction.get("source_refs", []) + _refs_from_certificates(certificates)
-                ),
-            }
-            missing.append(item)
-            details.append({"type": "certificate", "fields": [item]})
+    if extraction and extraction.get("status") in {"partial", "claimed_not_extracted", "unknown"}:
+        item = {
+            "field": "certificate_extraction", "cv_value": identity.get("certificate_summary", ""),
+            "status": "incomplete_mapping", "source_refs": _unique_refs(
+                extraction.get("source_refs", []) + _refs_from_certificates(certificates)
+            ),
+        }
+        missing.append(item)
+        details.append({"type": "certificate", "fields": [item]})
+        comparable_count += 1
 
     refs = _unique_refs(all_refs)
     if comparable_count == 0:

@@ -33,6 +33,36 @@ def unique(rows, key, label):
     return values
 
 
+def _certificate_summary_contradiction(summary, claims):
+    """Reconcile only declarations whose boundaries are explicit; ambiguity stays unresolved."""
+    text = summary.strip()
+    if not text:
+        return None
+    normalized_summary = normalized(text)
+    if re.search(r'\b(beberapa|berbagai|sejumlah)\b', normalized_summary):
+        return 'certificate_extraction complete tidak dapat dipastikan dari ringkasan CV yang ambigu'
+    segments = [re.sub(r'^\s*(?:[-–—•]|\d+[.)])\s*', '', part).strip()
+                for part in re.split(r'[;\n•]+', text) if part.strip()]
+    if len(segments) != len(claims):
+        return 'certificate_extraction complete tidak mencakup seluruh deklarasi pada ringkasan CV'
+    unmatched = set(range(len(claims)))
+    for segment in segments:
+        value = normalized(segment)
+        matches = []
+        for index in unmatched:
+            claim = claims[index]
+            title = normalized(claim.get('title', ''))
+            optional = [normalized(claim.get(field, '')) for field in ('number', 'level', 'issuer')]
+            supported = [title, *[field for field in optional if field and
+                                  re.search(r'(?<!\w)' + re.escape(field) + r'(?!\w)', normalized_summary)]]
+            if supported and all(re.search(r'(?<!\w)' + re.escape(field) + r'(?!\w)', value) for field in supported):
+                matches.append(index)
+        if len(matches) != 1:
+            return 'certificate_extraction complete tidak dapat merekonsiliasi ringkasan CV secara unik'
+        unmatched.remove(matches[0])
+    return None if not unmatched else 'certificate_extraction complete belum merekonsiliasi seluruh klaim CV'
+
+
 def validate_page_classification(root, manifest, value):
     """Classify every successfully OCR'd page exactly once.
 
@@ -647,14 +677,14 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
         status = certificate_extraction['status']
         summary_claim = canonical_text(person['identity'].get('certificate_summary', ''))
         contradiction = None
+        cv_pages = {
+            (item['document_id'], page)
+            for item in plan['coverage'] if person['id'] in item.get('person_ids', [])
+            for page in range(item['first_page'], item['last_page'] + 1)
+            if page_kind(classification, manifest, item['document_id'], page) == 'cv'
+        }
+        reviewed_pages = {(ref['document_id'], ref['page']) for ref in extraction_refs}
         if status == 'no_certificates_declared':
-            cv_pages = {
-                (item['document_id'], page)
-                for item in plan['coverage'] if person['id'] in item.get('person_ids', [])
-                for page in range(item['first_page'], item['last_page'] + 1)
-                if page_kind(classification, manifest, item['document_id'], page) == 'cv'
-            }
-            reviewed_pages = {(ref['document_id'], ref['page']) for ref in extraction_refs}
             if count != 0:
                 contradiction = 'certificate_extraction no_certificates_declared membutuhkan identified_count=0'
             elif certificate_claims or inventory or summary_claim:
@@ -670,6 +700,11 @@ def validate_person(root, manifest, plan, payload, *, stored=False):
                 contradiction = 'certificate_extraction complete membutuhkan pemetaan setiap certificate_claims'
             elif set(mapped_inventory_ids) != set(inventory):
                 contradiction = 'certificate_extraction complete harus merekonsiliasi seluruh certificate_inventory'
+            elif not cv_pages.issubset(reviewed_pages):
+                contradiction = 'certificate_extraction complete membutuhkan bukti seluruh halaman CV personel'
+            else:
+                contradiction = _certificate_summary_contradiction(
+                    person['identity'].get('certificate_summary', ''), certificate_claims)
         elif status == 'partial':
             if count != len(certificate_claims) or not certificate_claims:
                 contradiction = 'certificate_extraction partial membutuhkan identified_count sesuai certificate_claims'

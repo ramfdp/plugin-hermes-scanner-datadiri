@@ -33,6 +33,12 @@ Nama berkas keluaran tetap `Ringkasan_Tenaga_Ahli.xlsx` dan
   nilai pembanding, pengalaman terkait, dan hasilnya.
 - Verifikasi identitas sertifikat tetap terpisah dari pemeriksaan tanggal
   berlaku. Situs yang berhasil diakses tidak berarti seluruh klaim terverifikasi.
+- Pencocokan sertifikat menampilkan nama/bidang, nomor, jenjang, dan penerbit yang
+  didukung sumber. Sertifikat dengan bidang sama tetapi nomor berbeda tampil sebagai
+  baris terpisah pada Excel dan rincian terpisah pada PDF. ID internal tidak ditampilkan.
+- Keterbatasan ekstraksi sertifikat tetap ditampilkan walaupun satu dokumen cocok.
+  Sertifikat kedaluwarsa tidak dianggap membuktikan ketiadaan sertifikat lain saat
+  cakupan ekstraksi masih `partial` atau `unknown`.
 
 ## Pemeriksaan yang tidak diterapkan
 

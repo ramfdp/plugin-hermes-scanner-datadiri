@@ -214,6 +214,34 @@ class ReviewTest(unittest.TestCase):
         self.assertEqual(saved['certificate_extraction']['status'], 'unknown')
         self.assertEqual(result['final_conclusion']['status'], 'perlu_klarifikasi')
 
+    def test_complete_certificate_extraction_rejects_omitted_delimited_claim(self):
+        rid = create_run(self.root)
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+        person = person_payload(0)
+        person['identity']['certificate_summary'] = 'Skema Contoh; Skema Kedua'
+        with self.assertRaisesRegex(ValueError, 'complete.*ringkasan CV'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_complete_certificate_extraction_rejects_ambiguous_summary(self):
+        rid = create_run(self.root)
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+        person = person_payload(0)
+        person['identity']['certificate_summary'] = 'Memiliki beberapa sertifikat Skema Contoh'
+        with self.assertRaisesRegex(ValueError, 'complete.*ambigu'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
+    def test_duplicate_certificate_inventory_mapping_is_rejected(self):
+        rid = create_run(self.root)
+        review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})
+        person = person_payload(0)
+        person['certificate_claims'].append({
+            'id': 'CC-SECOND', 'title': 'Skema Contoh', 'inventory_id': 'C1',
+            'source_refs': [{'document_id': 'D001', 'page': 1, 'quote': 'Skema Contoh'}],
+        })
+        person['certificate_extraction']['identified_count'] = 2
+        with self.assertRaisesRegex(ValueError, 'tidak boleh memetakan'):
+            review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+
     def test_search_result_is_not_verification_evidence(self):
         rid = create_run(self.root)
         review.dispatch({'action': 'plan', 'run_id': rid, 'payload': plan_payload()})

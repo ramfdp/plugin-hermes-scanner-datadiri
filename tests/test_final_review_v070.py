@@ -243,6 +243,24 @@ class FinalReviewV070Test(unittest.TestCase):
         self.assertEqual(stored['anomalies'], [])
         self.assertEqual(stored['final_conclusion']['status'], 'memenuhi')
 
+    def test_incomplete_certificate_extraction_blocks_otherwise_successful_final_conclusion(self):
+        for extraction_status in ('partial', 'unknown'):
+            with self.subTest(extraction_status=extraction_status):
+                rid = self.prepare_run()
+                person = self.person()
+                person['certificate_extraction']['status'] = extraction_status
+                person['certificate_extraction']['identified_count'] = (
+                    2 if extraction_status == 'partial' else None)
+                if extraction_status == 'partial':
+                    person['certificate_claims'].append({
+                        'id': 'CC2', 'title': 'Ahli Teknik Jembatan', 'inventory_id': None,
+                        'source_refs': [self.ref(1, 'Ahli Teknik Jembatan Level 7')],
+                    })
+                result = review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+                statuses = {row['code']: row['status'] for row in result['audit_checks']}
+                self.assertEqual(statuses['cv_supporting_document_match'], 'perlu_klarifikasi')
+                self.assertEqual(result['final_conclusion']['status'], 'perlu_klarifikasi')
+
     def test_cross_document_conflict_becomes_clarification_and_anomaly(self):
         support_project = 'Proyek Jalan Raya'
         rid = self.prepare_run(support_project=support_project)

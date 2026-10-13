@@ -486,6 +486,26 @@ class BDExportTest(unittest.TestCase):
         source_column = headers.index('Bukti sumber') + 1
         self.assertIn('CV Contoh.pdf, halaman 1:', book['Pencocokan Dokumen'].cell(2, source_column).value)
 
+    def test_same_scheme_certificates_are_distinguishable_in_pdf_and_xlsx(self):
+        person = self.data['people'][0]
+        ref = person['certificates'][0]['source_refs'][0]
+        person['document_cross_check']['details'].append({'type': 'certificate', 'fields': [
+            {'field': 'certificate', 'cv_value': 'Sertifikat Ahli Jalan, Nomor SKK-001',
+             'support_value': 'Sertifikat Ahli Jalan, Nomor SKK-001', 'status': 'match', 'source_refs': [ref]},
+            {'field': 'certificate', 'cv_value': 'Sertifikat Ahli Jalan, Nomor SKK-002',
+             'support_value': 'Sertifikat Ahli Jalan, Nomor SKK-002', 'status': 'match', 'source_refs': [ref]},
+        ]})
+        pdf_path, xlsx_path = self.export()
+        rendered = pdf_text(pdf_path)
+        self.assertIn('Sertifikat Ahli Jalan, Nomor SKK-001', rendered)
+        self.assertIn('Sertifikat Ahli Jalan, Nomor SKK-002', rendered)
+        self.assertNotIn('CC1', rendered)
+        book = load_workbook(xlsx_path, data_only=True)
+        self.addCleanup(book.close)
+        values = [cell.value for row in book['Pencocokan Dokumen'].iter_rows() for cell in row]
+        self.assertIn('Sertifikat Ahli Jalan, Nomor SKK-001', values)
+        self.assertIn('Sertifikat Ahli Jalan, Nomor SKK-002', values)
+
     def test_sixty_repeated_anomalies_remain_a_compact_pdf(self):
         base = self.data['people'][0]['anomalies'][0]
         self.data['people'][0]['anomalies'] = [

@@ -139,6 +139,44 @@ class StabilizationP1P2Test(unittest.TestCase):
         self.assertEqual(item["status"], "missing_support")
         self.assertEqual(result["check"]["status"], "perlu_klarifikasi")
 
+    def test_structured_match_does_not_hide_unknown_extraction(self):
+        result = evaluate_cv_supporting_documents(
+            {"certificate_summary": "Ahli Jalan N-1"}, [], [],
+            [{"inventory_id": "C1", "scheme": "Ahli Jalan", "number": "N-1", "holder": "Contoh",
+              "independent_support": True, "source_refs": [ref(2, "Ahli Jalan N-1")]}],
+            {"status": "unknown", "identified_count": None, "source_refs": [ref(1, "Ahli Jalan N-1")]},
+            [{"id": "CC1", "title": "Ahli Jalan", "number": "N-1", "inventory_id": "C1",
+              "source_refs": [ref(1, "Ahli Jalan N-1")]}],
+        )
+        certificate_items = [item for row in result["details"] if row["type"] == "certificate"
+                             for item in row["fields"]]
+        self.assertEqual(certificate_items[0]["status"], "match")
+        self.assertEqual(sum(item["status"] == "incomplete_mapping" for item in certificate_items), 1)
+        self.assertEqual(result["check"]["status"], "perlu_klarifikasi")
+
+    def test_empty_summary_with_unknown_extraction_remains_applicable(self):
+        result = evaluate_cv_supporting_documents(
+            {"certificate_summary": ""}, [], [], [],
+            {"status": "unknown", "identified_count": None, "source_refs": []}, [],
+        )
+        self.assertTrue(result["check"]["applicable"])
+        self.assertEqual(result["check"]["status"], "perlu_klarifikasi")
+
+    def test_complete_structured_match_has_distinguishable_business_label(self):
+        result = evaluate_cv_supporting_documents(
+            {"certificate_summary": "Ahli Jalan N-2 Level 7 Penerbit Uji"}, [], [],
+            [{"inventory_id": "C2", "scheme": "Ahli Jalan", "number": "N-2", "holder": "Contoh",
+              "level": "7", "issuer": "Penerbit Uji", "independent_support": True,
+              "source_refs": [ref(2, "Ahli Jalan N-2 Level 7 Penerbit Uji")]}],
+            {"status": "complete", "identified_count": 1},
+            [{"id": "CC2", "title": "Ahli Jalan", "number": "N-2", "level": "7",
+              "issuer": "Penerbit Uji", "inventory_id": "C2",
+              "source_refs": [ref(1, "Ahli Jalan N-2 Level 7 Penerbit Uji")]}],
+        )
+        item = next(item for row in result["details"] if row["type"] == "certificate" for item in row["fields"])
+        self.assertEqual(item["status"], "match")
+        self.assertEqual(item["cv_value"], "Sertifikat Ahli Jalan, Nomor N-2, Jenjang 7, Penerbit Penerbit Uji")
+
     def test_unmapped_kak_criteria_render_as_not_yet_assessable(self):
         presenter = ReportPresenter({"documents": [], "requirements": [], "people": [], "sources": [],
                                      "kak": {"coverage": {"status": "incomplete"}}})

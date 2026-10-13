@@ -507,9 +507,53 @@ class KakMatchingV060Test(unittest.TestCase):
                'parameters': {'schemes': ['Ahli Teknik Jembatan'], 'levels': ['7'],
                               'issuers': [], 'require_current': True}}
         cert = {'scheme': 'Ahli Teknik Jembatan', 'level': '7', 'issuer': 'BNSP',
-                'validity': 'kedaluwarsa', 'source_refs': []}
-        detail = certificate_details([req], 'Engineer', [cert])[0]
+                'validity': 'kedaluwarsa', 'independent_support': True, 'source_refs': []}
+        detail = certificate_details([req], 'Engineer', [cert], {'status': 'complete'})[0]
         self.assertEqual(detail['status'], 'tidak_memenuhi')
+
+    def test_expired_matching_certificate_is_unresolved_when_extraction_incomplete(self):
+        req = {'id': 'C', 'role': 'Engineer', 'audit_code': 'certificate_kak_validity',
+               'kind': 'certificate', 'text': 'Ahli Jalan berlaku',
+               'parameters': {'schemes': ['Ahli Jalan'], 'require_current': True}, 'source_refs': []}
+        cert = {'scheme': 'Ahli Jalan', 'validity': 'kedaluwarsa', 'independent_support': True,
+                'source_refs': []}
+        for extraction_status in ('partial', 'unknown', 'claimed_not_extracted'):
+            with self.subTest(extraction_status=extraction_status):
+                detail = certificate_details([req], 'Engineer', [cert], {'status': extraction_status})[0]
+                self.assertEqual(detail['status'], 'perlu_klarifikasi')
+
+    def test_missing_independence_metadata_never_verifies_certificate(self):
+        req = {'id': 'C', 'role': 'Engineer', 'audit_code': 'certificate_kak_validity',
+               'kind': 'certificate', 'text': 'Ahli Jalan berlaku',
+               'parameters': {'schemes': ['Ahli Jalan'], 'require_current': True}, 'source_refs': []}
+        cert = {'scheme': 'Ahli Jalan', 'validity': 'belum_melewati_tanggal_akhir', 'source_refs': []}
+        detail = certificate_details([req], 'Engineer', [cert], {'status': 'complete'})[0]
+        self.assertEqual(detail['status'], 'perlu_klarifikasi')
+
+    def test_complete_no_matching_certificate_is_a_supported_failure(self):
+        req = {'id': 'C', 'role': 'Engineer', 'audit_code': 'certificate_kak_validity',
+               'kind': 'certificate', 'text': 'Ahli Jalan berlaku',
+               'parameters': {'schemes': ['Ahli Jalan'], 'require_current': True}, 'source_refs': []}
+        cert = {'scheme': 'Ahli Jembatan', 'validity': 'belum_melewati_tanggal_akhir',
+                'independent_support': True, 'source_refs': []}
+        detail = certificate_details([req], 'Engineer', [cert], {'status': 'complete'})[0]
+        self.assertEqual(detail['status'], 'tidak_memenuhi')
+
+    def test_one_valid_certificate_satisfies_requirement_despite_other_expired_or_unresolved_claims(self):
+        req = {'id': 'C', 'role': 'Engineer', 'audit_code': 'certificate_kak_validity',
+               'kind': 'certificate', 'text': 'Ahli Jalan berlaku',
+               'parameters': {'schemes': ['Ahli Jalan'], 'require_current': True}, 'source_refs': []}
+        certificates = [
+            {'scheme': 'Ahli Jalan', 'number': 'N-VALID', 'validity': 'belum_melewati_tanggal_akhir',
+             'independent_support': True, 'source_refs': []},
+            {'scheme': 'Ahli Jalan', 'number': 'N-OLD', 'validity': 'kedaluwarsa',
+             'independent_support': True, 'source_refs': []},
+        ]
+        for extraction_status in ('complete', 'partial'):
+            with self.subTest(extraction_status=extraction_status):
+                detail = certificate_details([req], 'Engineer', certificates,
+                                             {'status': extraction_status})[0]
+                self.assertEqual(detail['status'], 'memenuhi')
 
     def test_payload_cannot_override_structured_server_audit(self):
         rid = self.prepare_run()

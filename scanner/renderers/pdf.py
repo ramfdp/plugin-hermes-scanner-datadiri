@@ -143,12 +143,22 @@ def render(data, path):
         cross = person.get('document_cross_check', {})
         cross_items = [item for detail in cross.get('details', []) for item in detail.get('fields', [])
                        if item.get('status') != 'match']
+        certificate_items = [item for detail in cross.get('details', []) if detail.get('type') == 'certificate'
+                             for item in detail.get('fields', []) if item.get('field') == 'certificate']
         if cross_items:
             add('Pencocokan CV dan dokumen pendukung', heading)
             conflicts = sum(item.get('status') == 'conflict' for item in cross_items)
             missing = len(cross_items) - conflicts
             add(f'{conflicts} perbedaan informasi dan {missing} butir belum memiliki bukti pembanding. '
                 'Rincian field tetap tersedia dalam arsip audit dan workbook.', small)
+        elif certificate_items:
+            add('Pencocokan CV dan dokumen pendukung', heading)
+        for item in certificate_items:
+            add(item.get('cv_value', 'Sertifikat belum teridentifikasi'), sub)
+            field('Hasil pencocokan:', present.status(item.get('status')))
+            if item.get('support_value'):
+                field('Dokumen pendukung:', item['support_value'])
+            field('Rujukan bukti:', present.reference_markers(person, item.get('source_refs', [])))
 
         if person.get('anomalies'):
             add('Informasi yang perlu dikonfirmasi', heading)

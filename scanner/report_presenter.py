@@ -263,6 +263,9 @@ class ReportPresenter:
                 refs.extend(item.get('kak_refs', []))
                 for fact in item.get('supporting_facts', []):
                     refs.extend(fact.get('source_refs', []))
+        for detail in person.get('document_cross_check', {}).get('details', []):
+            for item in detail.get('fields', []):
+                refs.extend(item.get('source_refs', []))
         result, seen = [], set()
         for ref in refs:
             key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))

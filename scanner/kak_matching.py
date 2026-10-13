@@ -335,6 +335,7 @@ def _cert_matches(cert, params):
 
 def certificate_details(requirements, role, certificates, extraction=None):
     extraction = extraction or {"status": "unknown"}
+    extraction_complete = extraction.get("status") in {"complete", "no_certificates_declared"}
     rows = []
     for req in requirements:
         if req.get("audit_code") != "certificate_kak_validity" or not applicable(req, role):
@@ -353,11 +354,14 @@ def certificate_details(requirements, role, certificates, extraction=None):
             clarification = "Selesaikan ekstraksi dan pemetaan seluruh klaim sertifikat sebelum menetapkan ketiadaan."
             refs = _unique_refs(extraction.get("source_refs", []))
         elif not candidates:
-            status = "perlu_klarifikasi"
-            finding = "Ada sertifikat, tetapi tidak ada kecocokan exact skema/jenjang/penerbit terhadap parameter KAK."
-            clarification = "Konfirmasi ekuivalensi nama skema/jenjang/penerbit atau lampirkan sertifikat yang sesuai."
+            status = "tidak_memenuhi" if extraction_complete else "perlu_klarifikasi"
+            finding = ("Ekstraksi sertifikat lengkap, tetapi tidak ditemukan sertifikat dengan skema/jenjang/penerbit yang diwajibkan KAK."
+                       if extraction_complete else
+                       "Ada sertifikat terpetakan, tetapi ekstraksi belum lengkap dan belum ditemukan kecocokan exact terhadap parameter KAK.")
+            clarification = ("" if extraction_complete else
+                             "Selesaikan ekstraksi sebelum menyimpulkan bahwa sertifikat yang dipersyaratkan tidak tersedia.")
         else:
-            independently_supported = [cert for cert in candidates if cert.get("independent_support") is not False]
+            independently_supported = [cert for cert in candidates if cert.get("independent_support") is True]
             if not independently_supported:
                 rows.append(_detail(
                     req, "perlu_klarifikasi",
@@ -380,10 +384,14 @@ def certificate_details(requirements, role, certificates, extraction=None):
                 status = "memenuhi"
                 finding = "Ditemukan sertifikat dengan skema/jenjang/penerbit yang cocok dan kondisi masa berlaku memenuhi parameter KAK."
                 clarification = ""
-            elif expired and not unknown:
+            elif expired and not unknown and extraction_complete:
                 status = "tidak_memenuhi"
                 finding = "Sertifikat yang cocok ditemukan, tetapi tidak berlaku pada tanggal acuan pemeriksaan."
                 clarification = ""
+            elif expired and not unknown:
+                status = "perlu_klarifikasi"
+                finding = "Sertifikat cocok yang telah dipetakan tidak berlaku, tetapi ekstraksi sertifikat belum lengkap sehingga ketiadaan sertifikat lain yang masih berlaku belum dapat dipastikan."
+                clarification = "Selesaikan ekstraksi seluruh klaim sertifikat sebelum menetapkan kegagalan requirement ini."
             else:
                 status = "perlu_klarifikasi"
                 finding = "Sertifikat yang cocok ditemukan, tetapi masa berlakunya belum dapat dipastikan."
