@@ -385,6 +385,38 @@ def validate_person(root, manifest, plan, payload):
         job['supporting_facts'] = supporting_facts
     person['employment_history'] = history
 
+    extraction = person.get('history_extraction')
+    if extraction is None:
+        extraction = {
+            'status': ('claimed_not_extracted' if not history and isinstance(claimed, int) and claimed > 0 else
+                       'unknown'),
+            'identified_count': None,
+            'analysis': 'Kelengkapan ekstraksi belum dinyatakan oleh proses pembacaan dokumen.',
+            'source_refs': [],
+        }
+    else:
+        if not isinstance(extraction, dict):
+            raise ValueError('history_extraction harus object')
+        extraction = copy.deepcopy(extraction)
+        allowed = {'no_experience_declared', 'claimed_not_extracted', 'partially_extracted', 'complete', 'unknown'}
+        if extraction.get('status') not in allowed:
+            raise ValueError('history_extraction.status tidak valid')
+        count = extraction.get('identified_count')
+        if count is not None and (type(count) is not int or count < 0):
+            raise ValueError('history_extraction.identified_count harus integer nonnegatif atau null')
+        require_text(extraction.get('analysis'), 'history_extraction.analysis', 20)
+        extraction_refs = source_refs(root, manifest, extraction.get('source_refs', []),
+                                      required=extraction['status'] in {'partially_extracted', 'complete'},
+                                      kinds={'cv'}, page_classification=classification)
+        own_refs(extraction_refs)
+        if extraction['status'] == 'complete' and count != len(history):
+            raise ValueError('history_extraction complete harus mencocokkan jumlah riwayat terstruktur')
+        if extraction['status'] == 'partially_extracted' and (count is None or count <= len(history)):
+            raise ValueError('history_extraction partial membutuhkan jumlah pengalaman sumber yang lebih besar')
+        if extraction['status'] == 'no_experience_declared' and history:
+            raise ValueError('history_extraction no_experience_declared tidak sesuai riwayat terstruktur')
+    person['history_extraction'] = extraction
+
     education_records = records(person.get('education_records', []), 'education_records')
     for record in education_records:
         for field in ('level', 'major', 'institution', 'degree'):
@@ -430,6 +462,8 @@ def validate_person(root, manifest, plan, payload):
 
     assessment_date = date.fromisoformat(manifest['assessment_date'])
     person['chronology'] = chronology(history, assessment_date)
+    if history and person['chronology']['uncertain_entries'] and extraction['status'] == 'unknown':
+        extraction['status'] = 'incomplete_dates'
 
     certificates = records(person.get('certificates'), 'certificates')
     inventory = {cert['id']: cert for cert in roster.get('certificate_inventory', [])}

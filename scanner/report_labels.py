@@ -32,6 +32,7 @@ STATUS_LABELS = {
     'identitas_paket_dan_versi_ditemukan_pada_sumber': 'Identitas paket dan versi ditemukan pada sumber daring',
     'match': 'Sesuai', 'conflict': 'Berbeda; perlu dikonfirmasi',
     'missing_support': 'Bukti pendukung belum tersedia untuk informasi ini',
+    'incomplete_mapping': 'Pemetaan belum lengkap; perlu klarifikasi',
     'support_does_not_show_value': 'Informasi belum ditemukan pada dokumen pendukung',
     'cv_does_not_show_value': 'Informasi belum ditemukan pada CV',
 }
@@ -68,6 +69,7 @@ ANOMALY_LABELS = {
     'cv_support_conflict': 'Perbedaan antara CV dan dokumen pendukung',
     'cv_support_missing': 'Bukti pendukung belum cukup',
     'claimed_duration_mismatch': 'Perbedaan lama pengalaman',
+    'history_extraction_incomplete': 'Kelengkapan riwayat pengalaman',
 }
 
 PRECISION_LABELS = {

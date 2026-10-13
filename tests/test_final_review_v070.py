@@ -183,6 +183,11 @@ class FinalReviewV070Test(unittest.TestCase):
                     ],
                 }],
             }],
+            'history_extraction': {
+                'status': 'complete', 'identified_count': 1,
+                'analysis': 'Satu pengalaman yang dapat diidentifikasi pada CV sudah dipetakan seluruhnya.',
+                'source_refs': [self.ref(1, 'Proyek Jembatan Sungai')],
+            },
             'semantic_assessments': [{
                 'requirement_id': requirement_id, 'status': 'memenuhi',
                 'finding': f'Bukti kandidat mendukung requirement {requirement_id}.',
@@ -297,6 +302,26 @@ class FinalReviewV070Test(unittest.TestCase):
         self.assertEqual(cross['conflicts'], [])
         self.assertEqual(cross['missing'], [item])
 
+    def test_partial_certificate_inventory_is_unresolved_not_conflict(self):
+        known = self.ref(3, 'Sertifikat Manajemen Konstruksi')
+        unknown = self.ref(4, 'Nomor sertifikat tidak terbaca')
+        cross = evaluate_cv_supporting_documents(
+            {'certificate_summary': 'Ahli Teknik Jembatan Level 7'}, [], [],
+            [{'scheme': 'Manajemen Konstruksi', 'level': '7', 'source_refs': [known]},
+             {'scheme': '', 'level': '', 'source_refs': [unknown]}])
+        item = cross['details'][0]['fields'][0]
+        self.assertEqual(item['status'], 'incomplete_mapping')
+        self.assertEqual(cross['conflicts'], [])
+        self.assertEqual(cross['missing'], [item])
+
+    def test_complete_certificate_inventory_can_confirm_conflict(self):
+        ref = self.ref(3, 'Sertifikat Manajemen Konstruksi Level 7')
+        cross = evaluate_cv_supporting_documents(
+            {'certificate_summary': 'Ahli Teknik Jembatan Level 7'}, [], [],
+            [{'scheme': 'Manajemen Konstruksi', 'level': '7', 'source_refs': [ref]}])
+        self.assertEqual(cross['details'][0]['fields'][0]['status'], 'conflict')
+        self.assertEqual(len(cross['conflicts']), 1)
+
     def test_empty_history_does_not_turn_claimed_duration_into_zero_mismatch(self):
         cross = evaluate_cv_supporting_documents({}, [], [], [])
         result = evaluate_anomalies(
@@ -304,6 +329,21 @@ class FinalReviewV070Test(unittest.TestCase):
              'education_records': [], 'certificates': [],
              'chronology': {'calendar_months_unique': 0, 'uncertain_entries': []}}, {}, cross)
         self.assertFalse(any(item['code'] == 'claimed_duration_mismatch' for item in result['items']))
+
+    def test_partial_history_signal_preserves_records_and_requires_clarification(self):
+        rid = self.prepare_run()
+        person = self.person()
+        person['history_extraction'] = {
+            'status': 'partially_extracted', 'identified_count': 2,
+            'analysis': 'CV menunjukkan pengalaman tambahan yang belum dapat dipetakan tanpa menebak rinciannya.',
+            'source_refs': [self.ref(1, 'Proyek Jembatan Sungai')],
+        }
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        stored = storage.load(storage.run_dir(rid) / 'people' / 'P1.json')
+        self.assertEqual(len(stored['employment_history']), 1)
+        self.assertEqual(stored['history_extraction']['status'], 'partially_extracted')
+        anomaly = next(item for item in stored['anomalies'] if item['code'] == 'history_extraction_incomplete')
+        self.assertTrue(anomaly['material'])
 
     def test_export_contains_cross_check_anomaly_and_final_conclusion(self):
         rid = self.prepare_run()

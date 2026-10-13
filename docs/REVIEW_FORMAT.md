@@ -115,6 +115,9 @@ Semua kriteria yang berlaku harus memiliki satu check, dan semua certificate_inv
    "supporting_facts":[{"project":"Proyek contoh","employer":"Perusahaan Contoh","role":"Engineer",
       "start_date":"2020-01","end_date":"2020-12",
       "source_refs":[{"document_id":"D003","page":2,"quote":"Proyek contoh Perusahaan Contoh Engineer 2020-01 sampai 2020-12"}]}]}],
+ "history_extraction":{"status":"complete","identified_count":1,
+   "analysis":"Satu pengalaman yang dapat diidentifikasi pada halaman CV sudah dipetakan ke riwayat terstruktur.",
+   "source_refs":[{"document_id":"D001","page":1,"quote":"Perusahaan Contoh"}]},
  "employer_checks":[{"employer":"Perusahaan Contoh",
    "analysis":"Situs perusahaan belum dapat diperiksa; keberadaannya belum dapat diverifikasi."}],
  "certificates":[{"inventory_id":"C1","number":"CONTOH-001","holder":"Personel Contoh",
@@ -138,6 +141,9 @@ Tanggal dokumen dinilai terpisah, bukan jaminan sertifikat belum dicabut; jangan
 dan `certificate_limitation` wajib menjelaskan keterbatasan.
 
 Setiap baris `employment_history` memperoleh `id` snapshot-local (`E001`, `E002`, dst.) jika ID belum diberikan. Semua perusahaan di employment_history wajib memiliki employer_check (boleh belum terverifikasi).
+`history_extraction` membedakan `no_experience_declared`, `claimed_not_extracted`, `partially_extracted`,
+`complete`, dan `unknown`. `identified_count` menghitung pengalaman yang benar-benar dapat dibedakan pada sumber,
+bukan lama pengalaman. Status `complete`/`partially_extracted` wajib memiliki kutipan CV; data yang hilang tidak boleh ditebak.
 Hasil portal boleh ditambahkan melalui receipt_id + quote. Keberadaan perusahaan bukan bukti hubungan kerja.
 Tanggal riwayat harus persis presisi yang tersedia: YYYY, YYYY-MM atau YYYY-MM-DD; jangan mengarang bulan.
 Hitungan server hanya indikator bulan kalender inklusif untuk YYYY-MM dan tidak menghitung overlap dua kali.

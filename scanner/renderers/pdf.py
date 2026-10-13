@@ -119,13 +119,18 @@ def render(data, path):
                 'experience_duration_match', 'responsibility_position_match', 'education_major_match',
                 'certificate_kak_validity', 'technical_competency_match',
             }:
+                if kak_unavailable:
+                    continue
                 unavailable_kak += 1
                 field(view['label'] + ':', view['status'])
                 continue
             field(view['label'] + ':', view['status'])
             if check.get('status') != 'memenuhi' and view['finding']:
                 add(view['finding'], small)
-        if unavailable_kak and not kak_unavailable:
+        if kak_unavailable:
+            add('Pemeriksaan persyaratan KAK tidak diterapkan karena acuan yang dapat dipakai belum tersedia. '
+                'Hal ini tidak menyatakan personel memenuhi atau tidak memenuhi persyaratan KAK.', small)
+        elif unavailable_kak:
             add(f'{unavailable_kak} aspek KAK tidak diterapkan karena persyaratan yang dapat dipakai belum tersedia. '
                 'Hal ini tidak berarti KAK pasti tidak mensyaratkannya.', small)
 
@@ -149,6 +154,8 @@ def render(data, path):
             if anomaly['fields']:
                 field('Informasi yang diperiksa:', ', '.join(present.field(value) for value in anomaly['fields']))
             add(anomaly['detail'])
+            if anomaly['material']:
+                field('Rujukan bukti:', present.reference_markers(person, anomaly['source_refs']))
         final = person.get('final_conclusion', {})
         add('Kesimpulan pemenuhan KAK', heading)
         field('Hasil:', present.status(final.get('status', 'perlu_klarifikasi')))
@@ -163,9 +170,10 @@ def render(data, path):
 
         add('Riwayat dan bukti pengalaman', heading)
         chronology = person['chronology']
+        duration = present.experience_duration(person)
         add(present.narrative(chronology['method'], person))
-        field('Total bulan kalender tanpa hitung ganda:', chronology['calendar_months_unique']
-              if person['employment_history'] else 'Belum dapat dihitung; riwayat terstruktur belum tersedia')
+        field('Kelengkapan ekstraksi riwayat:', present.history_extraction(person))
+        field('Total bulan kalender tanpa hitung ganda:', duration['display'])
         field('Bulan pengalaman yang relevan:', chronology['relevant_months']
               if person['employment_history'] else 'Belum dapat dihitung')
         field('Bulan relevan dengan bukti pendukung:', chronology['supported_relevant_months']

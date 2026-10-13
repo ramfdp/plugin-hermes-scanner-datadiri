@@ -153,7 +153,7 @@ def snapshot(root):
     for person in people:
         structured_kak = any(check.get('code') in KAK_MATCH_CODES and check.get('applicable')
                              for check in person.get('audit_checks', []))
-        if not person['checks'] and not structured_kak:
+        if plan['requirements'] and not person['checks'] and not structured_kak:
             limitations.append(f"{person['id']}: tidak ada kriteria KAK yang cocok dengan role.")
         if any(c['status'] == 'belum_dapat_dinilai' for c in person['checks']):
             limitations.append(f"{person['id']}: sebagian kriteria memerlukan klarifikasi.")
@@ -166,6 +166,10 @@ def snapshot(root):
                 receipt_ids.add(cert['receipt_id'])
         if person['chronology']['uncertain_entries']:
             limitations.append(f"{person['id']}: sebagian periode tidak dapat dihitung penuh pada tanggal acuan.")
+        if person.get('history_extraction', {}).get('status') in {
+            'claimed_not_extracted', 'partially_extracted', 'unknown'
+        }:
+            limitations.append(f"{person['id']}: kelengkapan ekstraksi riwayat pengalaman memerlukan klarifikasi.")
         for check in person.get('audit_checks', []):
             if check.get('applicable') and check.get('status') == 'perlu_klarifikasi':
                 limitations.append(f"{person['id']}: audit {check['code']} memerlukan klarifikasi.")

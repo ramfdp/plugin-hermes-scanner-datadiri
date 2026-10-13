@@ -194,6 +194,14 @@ def evaluate_cv_supporting_documents(identity, history, education_records, certi
                     "support_value": matches[0].get("scheme", ""), "status": "match",
                     "source_refs": certificate_refs,
                 }]})
+            elif usable is not None and len(usable) < len(certificates):
+                item = {
+                    "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
+                    "support_values": [cert.get("scheme", "") for cert in usable],
+                    "status": "incomplete_mapping", "source_refs": certificate_refs,
+                }
+                missing.append(item)
+                details.append({"type": "certificate", "fields": [item]})
             elif usable is not None:
                 item = {
                     "field": "certificate_summary", "cv_value": identity.get("certificate_summary"),
@@ -255,6 +263,14 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
             "source_refs": _unique_refs(source_refs or []),
         })
         refs.extend(source_refs or [])
+
+    extraction = person.get('history_extraction', {})
+    if extraction.get('status') in {'claimed_not_extracted', 'partially_extracted', 'unknown'}:
+        add(
+            'history_extraction_incomplete',
+            extraction.get('analysis') or 'Kelengkapan ekstraksi riwayat pengalaman belum dapat dipastikan.',
+            source_refs=extraction.get('source_refs', []),
+        )
 
     period = fact_analysis.get("period", {})
     for item in period.get("issues", []):

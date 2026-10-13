@@ -124,9 +124,14 @@ class ReportPresenter:
             code = str(anomaly.get('code', ''))
             family = ('document_support' if code.startswith(('cv_support_', 'consistency_')) else
                       'period' if code.startswith('period_') else code)
-            key = (family, tuple(anomaly.get('experience_ids', [])), bool(anomaly.get('material')))
+            material = bool(anomaly.get('material'))
+            evidence_key = tuple((r.get('document_id'), r.get('page'), r.get('quote'))
+                                 for r in anomaly.get('source_refs', []))
+            key = (family, tuple(anomaly.get('experience_ids', [])), material,
+                   anomaly.get('detail', ''), evidence_key) if material else (
+                       family, tuple(anomaly.get('experience_ids', [])), material)
             group = groups.setdefault(key, {
-                'label': self.anomaly_label(code), 'material': bool(anomaly.get('material')),
+                'label': self.anomaly_label(code), 'material': material,
                 'experience_ids': list(anomaly.get('experience_ids', [])), 'fields': [],
                 'details': [], 'source_refs': [], 'count': 0,
             })
@@ -144,9 +149,61 @@ class ReportPresenter:
                     seen.add(key)
                     unique_refs.append(ref)
             group['source_refs'] = unique_refs
-            group['detail'] = (group['details'][0] if group['count'] == 1 else
-                               f"{group['count']} catatan audit terkait dikelompokkan; rincian lengkap tetap tersimpan dalam arsip audit.")
+            details = list(dict.fromkeys(group['details']))
+            if group['material']:
+                group['detail'] = '\n'.join(f'{index}. {detail}' for index, detail in enumerate(details, 1))
+            else:
+                group['detail'] = (details[0] if group['count'] == 1 else
+                                   f"{group['count']} catatan audit terkait dikelompokkan; "
+                                   f"{len(details)} penjelasan berbeda tetap tersimpan dalam arsip audit dan workbook.")
         return sorted(groups.values(), key=lambda item: (not item['material'], item['label']))
+
+    @staticmethod
+    def experience_duration(person):
+        """Project chronology into one shared PDF/XLSX business value."""
+        history = person.get('employment_history', [])
+        chronology = person.get('chronology', {})
+        extraction = person.get('history_extraction', {})
+        status = extraction.get('status')
+        claimed = person.get('identity', {}).get('claimed_months')
+        if not history:
+            display = ('Belum dapat dihitung; pengalaman diklaim tetapi riwayat belum berhasil diekstrak'
+                       if isinstance(claimed, int) and claimed > 0 else
+                       'Belum dapat dihitung; riwayat pengalaman tidak tersedia')
+            return {'calculable': False, 'value': None, 'display': display}
+        if status == 'partially_extracted':
+            return {'calculable': False, 'value': None,
+                    'display': 'Belum dapat dihitung penuh; sebagian riwayat pengalaman belum berhasil diekstrak'}
+        if chronology.get('uncertain_entries'):
+            return {'calculable': False, 'value': None,
+                    'display': 'Belum dapat dihitung penuh; tanggal pengalaman belum lengkap atau tidak valid'}
+        value = chronology.get('calendar_months_unique')
+        if isinstance(value, int):
+            return {'calculable': True, 'value': value, 'display': value}
+        return {'calculable': False, 'value': None, 'display': 'Belum dapat dihitung; bukti belum memadai'}
+
+    @staticmethod
+    def history_extraction(person):
+        value = person.get('history_extraction', {}).get('status', 'unknown')
+        return {
+            'no_experience_declared': 'Tidak ada pengalaman yang dinyatakan pada sumber',
+            'claimed_not_extracted': 'Pengalaman dinyatakan, tetapi riwayat belum berhasil diekstrak',
+            'partially_extracted': 'Sebagian riwayat berhasil diekstrak; sisanya perlu klarifikasi',
+            'incomplete_dates': 'Riwayat berhasil diekstrak, tetapi tanggal belum lengkap',
+            'complete': 'Riwayat yang teridentifikasi berhasil diekstrak lengkap',
+            'unknown': 'Kelengkapan ekstraksi belum dapat dipastikan',
+        }.get(value, 'Kelengkapan ekstraksi belum dapat dipastikan')
+
+    def reference_markers(self, person, values):
+        index = {(r.get('document_id'), r.get('page'), r.get('quote')): number
+                 for number, r in enumerate(self.evidence_index(person), 1)}
+        markers = []
+        for ref in values or []:
+            key = (ref.get('document_id'), ref.get('page'), ref.get('quote'))
+            number = index.get(key)
+            if number is not None:
+                markers.append(f"B{number:03d} ({self.document(ref.get('document_id'))}, halaman {ref.get('page', '?')})")
+        return ', '.join(dict.fromkeys(markers)) or 'Bukti sumber tidak tersedia'
 
     @staticmethod
     def evidence_index(person):

@@ -60,8 +60,8 @@ def snapshot_fixture():
                     'clarification': 'Lampirkan ijazah', 'source_refs': [ref]}],
         'audit_checks': checks,
         'document_cross_check': {'details': [{'type': 'experience', 'experience_id': 'E001', 'fields': [
-            {'field': 'start_date', 'cv_value': '2020-01', 'support_values': ['2020-02'], 'status': 'conflict'},
-            {'field': 'employer', 'cv_value': 'PT Contoh', 'status': 'missing_support'},
+            {'field': 'start_date', 'cv_value': '2020-01', 'support_values': ['2020-02'], 'status': 'conflict', 'source_refs': [ref]},
+            {'field': 'employer', 'cv_value': 'PT Contoh', 'status': 'missing_support', 'source_refs': [ref]},
         ]}]},
         'anomalies': [{'id': 'A001', 'code': 'cv_support_conflict', 'field': 'start_date', 'material': True,
                        'experience_ids': ['E001'], 'detail': 'E001 field start_date berbeda antara CV dan fakta pendukung.', 'source_refs': [ref]}],
@@ -218,6 +218,32 @@ class BDPresentationTest(unittest.TestCase):
         self.assertEqual(groups[0]['count'], 5)
         self.assertEqual(len(groups[0]['source_refs']), 1)
 
+    def test_material_anomaly_projection_preserves_distinct_findings(self):
+        base = self.person['anomalies'][0]
+        self.person['anomalies'] = [
+            {**copy.deepcopy(base), 'detail': 'Tanggal mulai melewati tanggal penilaian.', 'material': True},
+            {**copy.deepcopy(base), 'detail': 'Tanggal selesai melewati tanggal penilaian.', 'material': True},
+        ]
+        groups = self.present.anomaly_groups(self.person)
+        self.assertEqual(len(groups), 2)
+        details = '\n'.join(group['detail'] for group in groups)
+        self.assertIn('Tanggal mulai', details)
+        self.assertIn('Tanggal selesai', details)
+
+    def test_experience_duration_projection_distinguishes_unavailable_states(self):
+        person = copy.deepcopy(self.person)
+        person['employment_history'] = []
+        person['identity']['claimed_months'] = 120
+        state = self.present.experience_duration(person)
+        self.assertFalse(state['calculable'])
+        self.assertIn('diklaim', state['display'])
+
+        person['employment_history'] = [copy.deepcopy(self.person['employment_history'][0])]
+        person['chronology']['uncertain_entries'] = [1]
+        state = self.present.experience_duration(person)
+        self.assertFalse(state['calculable'])
+        self.assertIn('tanggal', state['display'])
+
     def test_short_source_values_do_not_split_internal_identifiers(self):
         self.person['name'] = 'a'
         self.person['certificates'][0]['number'] = '001'
@@ -334,6 +360,29 @@ class BDExportTest(unittest.TestCase):
         self.addCleanup(book.close)
         self.assertEqual(book['Ringkasan Pemeriksaan']['D2'].value, 'Perlu Klarifikasi')
 
+    def test_pdf_and_xlsx_share_unavailable_experience_state(self):
+        person = self.data['people'][0]
+        person['employment_history'] = []
+        person['identity']['claimed_months'] = 120
+        person['chronology'] = {'calendar_months_unique': 0, 'relevant_months': 0,
+                                'supported_relevant_months': 0, 'uncertain_entries': [],
+                                'method': 'Tidak ada periode yang dapat dihitung.'}
+        pdf_path, xlsx_path = self.export()
+        expected = 'Belum dapat dihitung; pengalaman diklaim tetapi riwayat belum berhasil diekstrak'
+        self.assertIn(expected, ' '.join(pdf_text(pdf_path).split()))
+        book = load_workbook(xlsx_path, data_only=True)
+        self.addCleanup(book.close)
+        self.assertEqual(book['Ringkasan Pemeriksaan']['H2'].value, expected)
+
+    def test_cross_check_sheet_keeps_field_level_source_reference(self):
+        _, xlsx_path = self.export()
+        book = load_workbook(xlsx_path, data_only=True)
+        self.addCleanup(book.close)
+        headers = [cell.value for cell in book['Pencocokan Dokumen'][1]]
+        self.assertIn('Bukti sumber', headers)
+        source_column = headers.index('Bukti sumber') + 1
+        self.assertIn('CV Contoh.pdf, halaman 1:', book['Pencocokan Dokumen'].cell(2, source_column).value)
+
     def test_sixty_repeated_anomalies_remain_a_compact_pdf(self):
         base = self.data['people'][0]['anomalies'][0]
         self.data['people'][0]['anomalies'] = [
@@ -345,6 +394,41 @@ class BDExportTest(unittest.TestCase):
         with pdfium.PdfDocument(str(pdf_path)) as document:
             self.assertLessEqual(len(document), 8)
         self.assertIn('60 catatan audit terkait', pdf_text(pdf_path))
+
+    def test_nine_person_mixed_report_preserves_material_findings_and_stays_readable(self):
+        people = []
+        for index in range(9):
+            person = copy.deepcopy(self.data['people'][0])
+            person['id'] = f'P{index + 1:03d}'
+            person['name'] = f'Personel Sintetis {index + 1}'
+            person['history_extraction'] = {
+                'status': 'partially_extracted' if index % 3 == 0 else 'complete',
+                'identified_count': 3 if index % 3 == 0 else 2,
+                'analysis': 'Sebagian riwayat memerlukan klarifikasi.' if index % 3 == 0 else 'Dua riwayat teridentifikasi dan sudah dipetakan.',
+                'source_refs': person['employment_history'][0]['source_refs'],
+            }
+            material = copy.deepcopy(person['anomalies'][0])
+            material['detail'] = f'Temuan material unik personel {index + 1}.'
+            repeated = [{**copy.deepcopy(material), 'id': f'N{index}-{number}', 'material': False,
+                         'detail': 'Bukti pendukung belum tersedia untuk informasi berulang.'}
+                        for number in range(6)]
+            person['anomalies'] = [material, *repeated]
+            people.append(person)
+        self.data['people'] = people
+        self.data['requirements'] = []
+        self.data['kak'].update(status='tidak_tersedia', title='', version='', package_id='')
+        self.data['limitations'] = ['Tidak ada persyaratan KAK yang dapat digunakan; kesesuaian tidak dapat dinilai.']
+
+        pdf_path, xlsx_path = self.export()
+        with pdfium.PdfDocument(str(pdf_path)) as document:
+            self.assertLessEqual(len(document), 45)
+        text = pdf_text(pdf_path)
+        for index in range(9):
+            self.assertIn(f'Temuan penting untuk klarifikasi unik personel {index + 1}.', text)
+        book = load_workbook(xlsx_path, data_only=True)
+        self.addCleanup(book.close)
+        self.assertEqual(book['Ringkasan Pemeriksaan'].max_row, 10)
+        self.assertEqual(book['Konfirmasi Data'].max_row - 1, 63)
 
 
 if __name__ == '__main__':

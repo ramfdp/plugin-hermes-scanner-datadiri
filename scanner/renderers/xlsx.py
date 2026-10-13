@@ -6,6 +6,7 @@ from ..web import normalized
 
 def render(data, path):
     present = ReportPresenter(data)
+    kak_unavailable = data['kak'].get('status') == 'tidak_tersedia' or not data['requirements']
     people = []
     for person in data['people']:
         identity = person['identity']
@@ -30,18 +31,26 @@ def render(data, path):
             who = [number, person['name'], person['role']]
             explain = lambda value: present.narrative(value, person)
             chronology = person['chronology']
+            duration = present.experience_duration(person)
             final = person.get('final_conclusion', {})
             summary_rows.append([*who, present.status(final.get('status', 'perlu_klarifikasi')),
                                  explain(person['summary']), explain(final.get('finding', '')),
-                                 person['identity'].get('claimed_months'), chronology['calendar_months_unique'],
+                                 person['identity'].get('claimed_months'), duration['display'],
                                  chronology['relevant_months'], chronology['supported_relevant_months'],
-                                 len(chronology['uncertain_entries']), present.uncertain_experiences(person), explain(chronology['method']),
+                                 present.history_extraction(person), len(chronology['uncertain_entries']),
+                                 present.uncertain_experiences(person), explain(chronology['method']),
                                  '\n'.join(explain(x) for x in person['findings']), explain(person.get('certificate_limitation', ''))])
             for check in person['checks']:
                 view = present.check(check, person)
                 check_rows.append([*who, check['requirement'], view['status'], view['finding'], view['analysis'],
                                    view['clarification'], view['evidence']])
             for check in person.get('audit_checks', []):
+                if kak_unavailable and check.get('applicable') is False and check.get('code') in {
+                    'position_experience_match', 'project_kak_match', 'organization_role_match',
+                    'experience_duration_match', 'responsibility_position_match', 'education_major_match',
+                    'certificate_kak_validity', 'technical_competency_match',
+                }:
+                    continue
                 view = present.check(check, person)
                 audit_rows.append([*who, view['label'], view['status'], view['finding'], view['analysis'],
                                    view['clarification'], view['evidence'], view['kak_evidence']])
@@ -51,7 +60,8 @@ def render(data, path):
                     support = item.get('support_value') or ' | '.join(map(str, item.get('support_values', [])))
                     cross_rows.append([*who, present.kind(detail.get('type')), experience, detail.get('record', ''),
                                        present.field(item.get('field')), item.get('cv_value', ''),
-                                       support or 'Belum tersedia untuk informasi ini', present.status(item.get('status'))])
+                                       support or 'Belum tersedia untuk informasi ini', present.status(item.get('status')),
+                                       present.references(item.get('source_refs', [])) or 'Bukti sumber tidak tersedia'])
             for anomaly in person.get('anomalies', []):
                 anomaly_rows.append([*who, present.anomaly_label(anomaly.get('code')), present.flag(anomaly.get('material')),
                                      present.experiences(person, anomaly.get('experience_ids', [])),
@@ -93,14 +103,15 @@ def render(data, path):
 
         sheet('Ringkasan Pemeriksaan', ['Kesimpulan KAK', 'Ringkasan', 'Dasar kesimpulan', 'Pengalaman dalam CV (bulan)',
               'Bulan kalender tanpa hitung ganda', 'Bulan relevan', 'Bulan relevan dengan bukti',
-              'Jumlah periode belum dapat dihitung penuh', 'Periode yang perlu dilengkapi', 'Cara penghitungan', 'Temuan tambahan', 'Batas pemeriksaan sertifikat'],
-              summary_rows, [24,48,48,18,20,18,20,22,48,48,48,48])
+              'Kelengkapan ekstraksi riwayat', 'Jumlah periode belum dapat dihitung penuh',
+              'Periode yang perlu dilengkapi', 'Cara penghitungan', 'Temuan tambahan', 'Batas pemeriksaan sertifikat'],
+              summary_rows, [24,48,48,18,20,18,20,38,22,48,48,48,48])
         sheet('Pemeriksaan KAK', ['Persyaratan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti'],
               check_rows, [48,24,48,48,48,55])
         sheet('Hasil Pemeriksaan', ['Pemeriksaan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti personel', 'Bukti KAK'],
               audit_rows, [40,24,48,48,48,55,55])
         sheet('Pencocokan Dokumen', ['Jenis', 'Pengalaman terkait', 'Urutan pendidikan', 'Informasi yang diperiksa',
-              'Isi CV', 'Isi dokumen pendukung', 'Hasil pencocokan'], cross_rows, [20,48,16,28,42,42,32])
+              'Isi CV', 'Isi dokumen pendukung', 'Hasil pencocokan', 'Bukti sumber'], cross_rows, [20,48,16,28,42,42,32,55])
         sheet('Konfirmasi Data', ['Hal yang perlu diperiksa', 'Ditandai penting untuk klarifikasi', 'Pengalaman terkait',
               'Informasi yang diperiksa', 'Penjelasan', 'Bukti'], anomaly_rows, [36,20,48,28,55,55])
         sheet('Pemeriksaan KAK Terperinci', ['Pemeriksaan', 'Persyaratan KAK', 'Hasil', 'Pengalaman terkait',
