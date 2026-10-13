@@ -241,8 +241,20 @@ class BDPresentationTest(unittest.TestCase):
         person['employment_history'] = [copy.deepcopy(self.person['employment_history'][0])]
         person['chronology']['uncertain_entries'] = [1]
         state = self.present.experience_duration(person)
-        self.assertFalse(state['calculable'])
-        self.assertIn('tanggal', state['display'])
+        self.assertFalse(state['represents_full_duration'])
+        self.assertIsNone(state['total']['value'])
+        self.assertIn('tanggal', state['explanation'])
+
+    def test_unknown_extraction_keeps_numeric_subset_with_explicit_qualification(self):
+        person = copy.deepcopy(self.person)
+        person['history_extraction'] = {'status': 'unknown'}
+        person['chronology']['uncertain_entries'] = []
+        state = self.present.experience_duration(person)
+        self.assertEqual(state['total']['value'], 24)
+        self.assertEqual(state['relevant']['value'], 24)
+        self.assertEqual(state['supported']['value'], 24)
+        self.assertFalse(state['represents_full_duration'])
+        self.assertIn('belum dapat dipastikan', state['explanation'])
 
     def test_short_source_values_do_not_split_internal_identifiers(self):
         self.person['name'] = 'a'
@@ -355,7 +367,7 @@ class BDExportTest(unittest.TestCase):
         self.data['requirements'] = []
         self.data['kak']['status'] = 'tidak_tersedia'
         pdf_path, xlsx_path = self.export()
-        self.assertIn('Kesesuaian belum dapat dinilai', pdf_text(pdf_path))
+        self.assertIn('Persyaratan KAK yang dapat dipakai belum tersedia', pdf_text(pdf_path))
         book = load_workbook(xlsx_path)
         self.addCleanup(book.close)
         self.assertEqual(book['Ringkasan Pemeriksaan']['D2'].value, 'Perlu Klarifikasi')
@@ -423,6 +435,8 @@ class BDExportTest(unittest.TestCase):
         with pdfium.PdfDocument(str(pdf_path)) as document:
             self.assertLessEqual(len(document), 45)
         text = pdf_text(pdf_path)
+        self.assertEqual(text.count('Persyaratan KAK yang dapat dipakai belum tersedia.'), 1)
+        self.assertNotIn('Belum tersedia kriteria KAK untuk posisi ini yang dapat digunakan.', text)
         for index in range(9):
             self.assertIn(f'Temuan penting untuk klarifikasi unik personel {index + 1}.', text)
         book = load_workbook(xlsx_path, data_only=True)

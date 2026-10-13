@@ -352,7 +352,7 @@ def evaluate_anomalies(person, fact_analysis, cross_check):
     claimed = person.get("identity", {}).get("claimed_months")
     unique_months = person.get("chronology", {}).get("calendar_months_unique")
     uncertain = person.get("chronology", {}).get("uncertain_entries", [])
-    if (person.get("employment_history") and isinstance(claimed, int) and
+    if (person.get("employment_history") and extraction.get('status') == 'complete' and isinstance(claimed, int) and
             isinstance(unique_months, int) and not uncertain and abs(claimed - unique_months) > 1):
         add(
             "claimed_duration_mismatch",

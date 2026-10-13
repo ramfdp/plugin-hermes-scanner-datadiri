@@ -73,12 +73,16 @@ def render(data, path):
     field('KAK:', data['kak'].get('title', 'Tidak tersedia'))
     field('Versi / paket:', f"{data['kak'].get('version','-')} / {data['kak'].get('package_id','-')}")
     field('Ketersediaan dan sumber KAK:', present.status(data['kak'].get('status')))
-    add(present.narrative(data['kak'].get('analysis', '')))
     kak_unavailable = data['kak'].get('status') == 'tidak_tersedia' or not data['requirements']
     if kak_unavailable:
         add('Persyaratan KAK yang dapat dipakai belum tersedia. Pemeriksaan KAK tidak diterapkan; '
             'hal ini tidak berarti KAK pasti tidak mensyaratkan aspek-aspek tersebut.')
+    else:
+        add(present.narrative(data['kak'].get('analysis', '')))
     for limitation in data['limitations']:
+        lowered = limitation.casefold()
+        if kak_unavailable and 'kak' in lowered and ('tidak ada' in lowered or 'tidak tersedia' in lowered):
+            continue
         field('Keterbatasan:', present.narrative(limitation))
     add('Identitas sertifikat, masa berlaku pada dokumen, dan kesesuaian terhadap KAK diperiksa secara terpisah. '
         'Data yang tidak ditemukan atau situs yang tidak dapat diakses bukan bukti pemalsuan.')
@@ -101,7 +105,7 @@ def render(data, path):
         field('Lama pengalaman dalam CV (bulan):', person['identity'].get('claimed_months'))
         add(present.narrative(person['summary'], person))
         add('Pemeriksaan persyaratan KAK', heading)
-        if not person['checks'] and not person.get('kak_match_details'):
+        if not kak_unavailable and not person['checks'] and not person.get('kak_match_details'):
             add('Belum tersedia kriteria KAK untuk posisi ini yang dapat digunakan. Kesesuaian belum dapat dinilai.')
         elif not person['checks']:
             add('Rincian persyaratan dan buktinya disajikan pada bagian Pemeriksaan KAK Terperinci.')
@@ -127,10 +131,7 @@ def render(data, path):
             field(view['label'] + ':', view['status'])
             if check.get('status') != 'memenuhi' and view['finding']:
                 add(view['finding'], small)
-        if kak_unavailable:
-            add('Pemeriksaan persyaratan KAK tidak diterapkan karena acuan yang dapat dipakai belum tersedia. '
-                'Hal ini tidak menyatakan personel memenuhi atau tidak memenuhi persyaratan KAK.', small)
-        elif unavailable_kak:
+        if unavailable_kak and not kak_unavailable:
             add(f'{unavailable_kak} aspek KAK tidak diterapkan karena persyaratan yang dapat dipakai belum tersedia. '
                 'Hal ini tidak berarti KAK pasti tidak mensyaratkannya.', small)
 
@@ -173,11 +174,10 @@ def render(data, path):
         duration = present.experience_duration(person)
         add(present.narrative(chronology['method'], person))
         field('Kelengkapan ekstraksi riwayat:', present.history_extraction(person))
-        field('Total bulan kalender tanpa hitung ganda:', duration['display'])
-        field('Bulan pengalaman yang relevan:', chronology['relevant_months']
-              if person['employment_history'] else 'Belum dapat dihitung')
-        field('Bulan relevan dengan bukti pendukung:', chronology['supported_relevant_months']
-              if person['employment_history'] else 'Belum dapat dihitung')
+        field('Total bulan kalender tanpa hitung ganda:', duration['total']['display'])
+        field('Bulan pengalaman yang relevan:', duration['relevant']['display'])
+        field('Bulan relevan dengan bukti pendukung:', duration['supported']['display'])
+        field('Cakupan angka pengalaman:', duration['explanation'])
         if chronology['uncertain_entries']:
             field('Jumlah periode yang belum dapat dihitung penuh:', len(chronology['uncertain_entries']))
             field('Pengalaman yang perlu dilengkapi periodenya:', present.uncertain_experiences(person))

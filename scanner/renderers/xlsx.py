@@ -35,10 +35,10 @@ def render(data, path):
             final = person.get('final_conclusion', {})
             summary_rows.append([*who, present.status(final.get('status', 'perlu_klarifikasi')),
                                  explain(person['summary']), explain(final.get('finding', '')),
-                                 person['identity'].get('claimed_months'), duration['display'],
-                                 chronology['relevant_months'], chronology['supported_relevant_months'],
+                                 person['identity'].get('claimed_months'), duration['total']['display'],
+                                 duration['relevant']['display'], duration['supported']['display'],
                                  present.history_extraction(person), len(chronology['uncertain_entries']),
-                                 present.uncertain_experiences(person), explain(chronology['method']),
+                                 present.uncertain_experiences(person), duration['explanation'], explain(chronology['method']),
                                  '\n'.join(explain(x) for x in person['findings']), explain(person.get('certificate_limitation', ''))])
             for check in person['checks']:
                 view = present.check(check, person)
@@ -104,8 +104,9 @@ def render(data, path):
         sheet('Ringkasan Pemeriksaan', ['Kesimpulan KAK', 'Ringkasan', 'Dasar kesimpulan', 'Pengalaman dalam CV (bulan)',
               'Bulan kalender tanpa hitung ganda', 'Bulan relevan', 'Bulan relevan dengan bukti',
               'Kelengkapan ekstraksi riwayat', 'Jumlah periode belum dapat dihitung penuh',
-              'Periode yang perlu dilengkapi', 'Cara penghitungan', 'Temuan tambahan', 'Batas pemeriksaan sertifikat'],
-              summary_rows, [24,48,48,18,20,18,20,38,22,48,48,48,48])
+              'Periode yang perlu dilengkapi', 'Cakupan angka pengalaman', 'Cara penghitungan',
+              'Temuan tambahan', 'Batas pemeriksaan sertifikat'],
+              summary_rows, [24,48,48,18,20,18,20,38,22,48,55,48,48,48])
         sheet('Pemeriksaan KAK', ['Persyaratan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti'],
               check_rows, [48,24,48,48,48,55])
         sheet('Hasil Pemeriksaan', ['Pemeriksaan', 'Hasil', 'Temuan', 'Penjelasan', 'Tindak lanjut', 'Bukti personel', 'Bukti KAK'],

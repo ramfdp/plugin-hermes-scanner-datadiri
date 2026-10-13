@@ -398,9 +398,13 @@ def validate_person(root, manifest, plan, payload):
         if not isinstance(extraction, dict):
             raise ValueError('history_extraction harus object')
         extraction = copy.deepcopy(extraction)
-        allowed = {'no_experience_declared', 'claimed_not_extracted', 'partially_extracted', 'complete', 'unknown'}
+        allowed = {'no_experience_declared', 'claimed_not_extracted', 'partially_extracted', 'complete', 'unknown',
+                   'incomplete_dates'}
         if extraction.get('status') not in allowed:
             raise ValueError('history_extraction.status tidak valid')
+        if extraction['status'] == 'incomplete_dates':
+            # Compatibility for checkpoints produced before date completeness was separated.
+            extraction['status'] = 'unknown'
         count = extraction.get('identified_count')
         if count is not None and (type(count) is not int or count < 0):
             raise ValueError('history_extraction.identified_count harus integer nonnegatif atau null')
@@ -462,8 +466,6 @@ def validate_person(root, manifest, plan, payload):
 
     assessment_date = date.fromisoformat(manifest['assessment_date'])
     person['chronology'] = chronology(history, assessment_date)
-    if history and person['chronology']['uncertain_entries'] and extraction['status'] == 'unknown':
-        extraction['status'] = 'incomplete_dates'
 
     certificates = records(person.get('certificates'), 'certificates')
     inventory = {cert['id']: cert for cert in roster.get('certificate_inventory', [])}

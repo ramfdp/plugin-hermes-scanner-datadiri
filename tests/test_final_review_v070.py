@@ -345,6 +345,68 @@ class FinalReviewV070Test(unittest.TestCase):
         anomaly = next(item for item in stored['anomalies'] if item['code'] == 'history_extraction_incomplete')
         self.assertTrue(anomaly['material'])
 
+    def test_unknown_extraction_with_year_dates_is_idempotent_and_exports(self):
+        rid = self.prepare_run()
+        person = self.person()
+        person['employment_history'][0].update(start_date='2020', end_date='2021')
+        person['history_extraction'] = {
+            'status': 'unknown', 'identified_count': None,
+            'analysis': 'Kelengkapan pemetaan riwayat belum dapat dipastikan dari dokumen sumber.',
+            'source_refs': [],
+        }
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        root = storage.run_dir(rid)
+        stored = storage.load(root / 'people' / 'P1.json')
+        self.assertEqual(stored['history_extraction']['status'], 'unknown')
+        status = review.dispatch({'action': 'status', 'run_id': rid})
+        self.assertEqual(status['saved_person_ids'], ['P1'])
+        first = review.snapshot(root)['people'][0]
+        second = review.snapshot(root)['people'][0]
+        self.assertEqual(first, second)
+        self.assertEqual(first['history_extraction']['status'], 'unknown')
+        self.assertTrue(first['chronology']['uncertain_entries'])
+        exported = review.dispatch({'action': 'export', 'run_id': rid})
+        self.assertTrue(exported['success'], exported)
+        self.assertEqual(len(exported['artifacts']), 2)
+
+    def test_partial_history_does_not_create_claimed_duration_mismatch(self):
+        history = [{'id': 'E001', 'project': 'Proyek terpetakan', 'employer': 'PT Contoh',
+                    'start_date': '2020-01', 'end_date': '2020-12', 'source_refs': [],
+                    'supporting_refs': [], 'supporting_facts': []}]
+        person = {'identity': {'claimed_months': 120}, 'employment_history': history,
+                  'history_extraction': {'status': 'partially_extracted', 'identified_count': 5,
+                                         'analysis': 'Empat pengalaman lain belum dipetakan.', 'source_refs': []},
+                  'education_records': [], 'certificates': [],
+                  'chronology': {'calendar_months_unique': 12, 'uncertain_entries': []}}
+        result = evaluate_anomalies(person, {}, evaluate_cv_supporting_documents({}, history, [], []))
+        codes = {item['code'] for item in result['items']}
+        self.assertIn('history_extraction_incomplete', codes)
+        self.assertNotIn('claimed_duration_mismatch', codes)
+
+    def test_complete_history_still_reports_genuine_duration_mismatch(self):
+        history = [{'id': 'E001', 'project': 'Proyek lengkap', 'employer': 'PT Contoh',
+                    'start_date': '2020-01', 'end_date': '2020-12', 'source_refs': [],
+                    'supporting_refs': [], 'supporting_facts': []}]
+        person = {'identity': {'claimed_months': 120}, 'employment_history': history,
+                  'history_extraction': {'status': 'complete', 'identified_count': 1,
+                                         'analysis': 'Seluruh riwayat dipetakan.', 'source_refs': []},
+                  'education_records': [], 'certificates': [],
+                  'chronology': {'calendar_months_unique': 12, 'uncertain_entries': []}}
+        result = evaluate_anomalies(person, {}, evaluate_cv_supporting_documents({}, history, [], []))
+        self.assertIn('claimed_duration_mismatch', {item['code'] for item in result['items']})
+
+    def test_legacy_incomplete_dates_checkpoint_is_read_without_rewriting_file(self):
+        rid = self.prepare_run()
+        person = self.person()
+        review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': person})
+        path = storage.run_dir(rid) / 'people' / 'P1.json'
+        legacy = storage.load(path)
+        legacy['history_extraction']['status'] = 'incomplete_dates'
+        storage.save(path, legacy)
+        reviewed = review.snapshot(storage.run_dir(rid))['people'][0]
+        self.assertEqual(reviewed['history_extraction']['status'], 'unknown')
+        self.assertEqual(storage.load(path)['history_extraction']['status'], 'incomplete_dates')
+
     def test_export_contains_cross_check_anomaly_and_final_conclusion(self):
         rid = self.prepare_run()
         review.dispatch({'action': 'save_person', 'run_id': rid, 'payload': self.person()})

@@ -164,23 +164,56 @@ class ReportPresenter:
         history = person.get('employment_history', [])
         chronology = person.get('chronology', {})
         extraction = person.get('history_extraction', {})
-        status = extraction.get('status')
+        status = extraction.get('status', 'unknown')
         claimed = person.get('identity', {}).get('claimed_months')
+        uncertain = chronology.get('uncertain_entries', [])
+
+        def metric(key, unavailable):
+            value = chronology.get(key)
+            if not isinstance(value, int):
+                value = None
+            return {'value': value, 'display': value if value is not None else unavailable}
+
         if not history:
-            display = ('Belum dapat dihitung; pengalaman diklaim tetapi riwayat belum berhasil diekstrak'
-                       if isinstance(claimed, int) and claimed > 0 else
-                       'Belum dapat dihitung; riwayat pengalaman tidak tersedia')
-            return {'calculable': False, 'value': None, 'display': display}
-        if status == 'partially_extracted':
-            return {'calculable': False, 'value': None,
-                    'display': 'Belum dapat dihitung penuh; sebagian riwayat pengalaman belum berhasil diekstrak'}
-        if chronology.get('uncertain_entries'):
-            return {'calculable': False, 'value': None,
-                    'display': 'Belum dapat dihitung penuh; tanggal pengalaman belum lengkap atau tidak valid'}
-        value = chronology.get('calendar_months_unique')
-        if isinstance(value, int):
-            return {'calculable': True, 'value': value, 'display': value}
-        return {'calculable': False, 'value': None, 'display': 'Belum dapat dihitung; bukti belum memadai'}
+            if status == 'no_experience_declared':
+                explanation = 'Dokumen sumber secara eksplisit tidak menyatakan pengalaman kerja.'
+                total = relevant = supported = {'value': 0, 'display': 0}
+                full = True
+            else:
+                unavailable = ('Belum dapat dihitung; pengalaman diklaim tetapi riwayat belum berhasil diekstrak'
+                               if isinstance(claimed, int) and claimed > 0 else
+                               'Belum dapat dihitung; riwayat pengalaman tidak tersedia')
+                explanation = 'Tidak ada riwayat terstruktur yang cukup untuk menghitung durasi.'
+                total = relevant = supported = {'value': None, 'display': unavailable}
+                full = False
+        else:
+            known_entries = max(0, len(history) - len(uncertain))
+            unavailable = 'Belum dapat dihitung; seluruh tanggal pengalaman belum lengkap atau tidak valid'
+            total = metric('calendar_months_unique', unavailable)
+            relevant = metric('relevant_months', unavailable)
+            supported = metric('supported_relevant_months', unavailable)
+            if uncertain and known_entries == 0:
+                total = relevant = supported = {'value': None, 'display': unavailable}
+            full = status == 'complete' and not uncertain
+            if status == 'partially_extracted':
+                explanation = 'Angka hanya mencakup riwayat yang berhasil diekstrak; bukan total seluruh pengalaman.'
+            elif status != 'complete':
+                explanation = 'Angka hanya mencakup riwayat terstruktur; kelengkapan ekstraksi belum dapat dipastikan.'
+            elif uncertain:
+                explanation = 'Seluruh riwayat teridentifikasi, tetapi angka hanya mencakup periode dengan tanggal yang dapat dihitung.'
+            else:
+                explanation = 'Angka mencakup seluruh riwayat teridentifikasi dengan tanggal yang dapat dihitung.'
+            if uncertain and status != 'complete':
+                explanation += ' Sebagian tanggal juga belum lengkap atau tidak valid.'
+        return {
+            'calculable': total['value'] is not None,
+            'value': total['value'], 'display': total['display'],
+            'total': total, 'relevant': relevant, 'supported': supported,
+            'extraction_complete': status == 'complete' or status == 'no_experience_declared',
+            'dates_complete': not uncertain,
+            'represents_full_duration': full,
+            'explanation': explanation,
+        }
 
     @staticmethod
     def history_extraction(person):
@@ -189,7 +222,6 @@ class ReportPresenter:
             'no_experience_declared': 'Tidak ada pengalaman yang dinyatakan pada sumber',
             'claimed_not_extracted': 'Pengalaman dinyatakan, tetapi riwayat belum berhasil diekstrak',
             'partially_extracted': 'Sebagian riwayat berhasil diekstrak; sisanya perlu klarifikasi',
-            'incomplete_dates': 'Riwayat berhasil diekstrak, tetapi tanggal belum lengkap',
             'complete': 'Riwayat yang teridentifikasi berhasil diekstrak lengkap',
             'unknown': 'Kelengkapan ekstraksi belum dapat dipastikan',
         }.get(value, 'Kelengkapan ekstraksi belum dapat dipastikan')
